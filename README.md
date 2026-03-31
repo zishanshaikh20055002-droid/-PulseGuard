@@ -1,21 +1,21 @@
-# 🚀 Edge AI Predictive Maintenance System
+# Edge AI Predictive Maintenance System
 
 A real-time industrial monitoring system that predicts machine failure using Edge AI and streams live alerts to a dashboard.
 
 ---
 
-## ⚙️ Features
+##  Features
 
-- 🔮 Transformer-based Remaining Useful Life (RUL) prediction  
-- ⚡ TFLite optimized model for edge deployment  
-- 🌐 FastAPI backend for real-time inference  
-- 🔁 WebSocket streaming for continuous monitoring  
-- 📊 Live dashboard with sensor visualization  
-- 🚨 Status alerts (HEALTHY / WARNING / CRITICAL)
+-  Transformer-based Remaining Useful Life (RUL) prediction  
+-  TFLite optimized model for edge deployment  
+-  FastAPI backend for real-time inference  
+-  WebSocket streaming for continuous monitoring  
+-  Live dashboard with sensor visualization  
+-  Status alerts (HEALTHY / WARNING / CRITICAL)
 
 ---
 
-## 🧠 Tech Stack
+##  Tech Stack
 
 - Python, TensorFlow, TFLite  
 - FastAPI, WebSockets  
@@ -23,4 +23,14 @@ A real-time industrial monitoring system that predicts machine failure using Edg
 
 ---
 
-## 📊 System Architecture
+##  System Architecture
+
+Sensor Data (simulated)
+↓
+TFLite Edge Model
+↓
+FastAPI Backend
+↓
+WebSocket Streaming
+↓
+Live Dashboard
