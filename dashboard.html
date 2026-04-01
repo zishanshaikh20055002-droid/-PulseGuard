@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Edge AI Dashboard</title>
+
+    <style>
+        body {
+            font-family: Arial;
+            background: #0f172a;
+            color: white;
+            text-align: center;
+            padding: 50px;
+            transition: background 0.5s ease;
+        }
+
+        .card {
+            background: #1e293b;
+            padding: 30px;
+            border-radius: 15px;
+            width: 350px;
+            margin: auto;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        .rul {
+            font-size: 40px;
+            margin: 20px 0;
+        }
+
+        .status {
+            font-size: 22px;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .HEALTHY { background: green; }
+        .WARNING { background: orange; }
+        .CRITICAL { background: red; }
+
+        .sensor {
+            text-align: left;
+            margin-top: 10px;
+        }
+
+        .sensor div {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>⚙️ Predictive Maintenance Dashboard</h1>
+
+    <div class="card">
+        <div><b>Remaining Useful Life</b></div>
+        <div class="rul" id="rul">--</div>
+
+        <div class="status" id="status">WAITING</div>
+
+        <div class="sensor">
+            <div>🌡 Temp: <span id="temp">--</span></div>
+            <div>🌬 Air Temp: <span id="air">--</span></div>
+            <div>⚙ Torque: <span id="torque">--</span></div>
+            <div>🛠 Tool Wear: <span id="wear">--</span></div>
+            <div>🚀 Speed: <span id="speed">--</span></div>
+        </div>
+    </div>
+
+    <script>
+        const ws = new WebSocket("ws://127.0.0.1:8000/ws");
+
+        ws.onopen = function() {
+            console.log("Connected to WebSocket 🚀");
+        };
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+
+            // RUL
+            document.getElementById("rul").innerText = data.RUL.toFixed(2);
+
+            // Status
+            let statusEl = document.getElementById("status");
+            statusEl.innerText = data.status;
+            statusEl.className = "status " + data.status;
+
+            // Sensors
+            document.getElementById("temp").innerText = data.temperature.toFixed(2);
+            document.getElementById("air").innerText = data.air_temperature.toFixed(2);
+            document.getElementById("torque").innerText = data.torque.toFixed(2);
+            document.getElementById("wear").innerText = data.tool_wear.toFixed(2);
+            document.getElementById("speed").innerText = data.speed.toFixed(2);
+
+            // Background alert
+            if (data.status === "CRITICAL") {
+                document.body.style.background = "#3b0000";
+            } 
+            else if (data.status === "WARNING") {
+                document.body.style.background = "#3b2f00";
+            } 
+            else {
+                document.body.style.background = "#0f172a";
+            }
+        };
+
+        ws.onerror = function(error) {
+            console.error("WebSocket error:", error);
+        };
+
+        ws.onclose = function() {
+            console.log("WebSocket disconnected");
+        };
+    </script>
+
+</body>
+</html>
