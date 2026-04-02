@@ -5,8 +5,9 @@ import tensorflow as tf
 import os
 import asyncio
 import joblib
-
+from src.database import init_db, insert_data
 app = FastAPI()
+init_db()
 
 # -------------------- PATHS --------------------
 
@@ -69,7 +70,6 @@ async def websocket_endpoint(websocket: WebSocket):
     print("Client connected")
 
     X = np.load(DATA_PATH)
-
     start = 200
 
     for i in range(start, start + 50):
@@ -91,6 +91,7 @@ async def websocket_endpoint(websocket: WebSocket):
         original_values = scaler.inverse_transform([sensor_values])[0]
 
         data = {
+            "machine_id": "M1",
             "step": i,
             "RUL": float(prediction),
             "status": status,
@@ -100,6 +101,8 @@ async def websocket_endpoint(websocket: WebSocket):
             "tool_wear": float(original_values[3]),
             "speed": float(original_values[4])
         }
+
+        insert_data(data)
 
         await websocket.send_json(data)
         await asyncio.sleep(1)
