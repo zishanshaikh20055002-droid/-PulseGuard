@@ -35,7 +35,7 @@ COPY --from=builder /install /usr/local
 
 # Copy application source code
 COPY src/       ./src/
-COPY src/app.py .
+COPY app.py .
 
 # data/ and models/ are NOT copied here — they are mounted as
 # Docker volumes in docker-compose.yml so they stay on your host
