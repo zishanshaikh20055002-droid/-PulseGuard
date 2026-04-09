@@ -35,7 +35,7 @@ from src.database import init_db
 from src.limiter import limiter
 from src.sanitize import sanitize_mode
 from src.metrics import (
-    rul_gauge, health_status_counter, inference_latency,
+    rul_gauge, rul_std_gauge, health_status_counter, inference_latency,
     ws_active_connections,
     simulation_mode_info,
     sensor_temperature, sensor_torque, sensor_tool_wear, sensor_speed,
@@ -43,10 +43,13 @@ from src.metrics import (
 from src.ws_manager import manager
 from src.mqtt_subscriber import start_subscriber
 
+# ── Define BASE_DIR ───────────────────────────────────────────
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # ── Paths ─────────────────────────────────────────────────────
-BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH  = os.path.join(BASE_DIR, "models", "model_int8.tflite")
-SCALER_PATH = os.path.join(BASE_DIR, "data",   "scaler.pkl")
+MODEL_PATH  = os.path.join(BASE_DIR, "models", "model_cmapss_int8.tflite")
+SCALER_PATH = os.path.join(BASE_DIR, "data",   "scaler_cmapss.pkl")
+DATA_PATH   = os.path.join(BASE_DIR, "data",   "X_cmapss.npy")
 
 MQTT_BROKER = os.getenv("MQTT_BROKER", "mosquitto")
 MQTT_PORT   = int(os.getenv("MQTT_PORT", "1883"))
@@ -62,6 +65,7 @@ scaler = joblib.load(SCALER_PATH)
 # ── Metrics bundle ────────────────────────────────────────────
 metrics = {
     "rul_gauge":             rul_gauge,
+    "rul_std_gauge":         rul_std_gauge,
     "health_status_counter": health_status_counter,
     "inference_latency":     inference_latency,
     "sensor_temperature":    sensor_temperature,
@@ -157,11 +161,6 @@ def set_mode(
     request: Request,
     current_user: User = Depends(require_admin),
 ):
-    """
-    Switch publisher mode: replay | random
-    Publishes a control message to the MQTT broker.
-    The publisher subscribes to this topic and switches mode on receipt.
-    """
     try:
         cleaned = sanitize_mode(new_mode)
     except ValueError as e:
@@ -186,11 +185,6 @@ def set_mode(
 # ── WebSocket ─────────────────────────────────────────────────
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """
-    Real-time sensor stream.
-    Connect with: ws://host/ws?token=<jwt>
-    Data is pushed by the MQTT subscriber — no polling loop needed.
-    """
     user = await get_ws_user(websocket)
     if not user:
         return
@@ -207,7 +201,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         while True:
-            await asyncio.sleep(30)  # keep alive, data arrives via broadcast
+            await asyncio.sleep(30)  
     except Exception:
         pass
     finally:

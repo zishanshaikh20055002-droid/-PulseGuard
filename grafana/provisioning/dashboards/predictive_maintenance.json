@@ -35,27 +35,53 @@
 
     {
       "id": 2,
-      "title": "RUL Over Time",
+      "title": "RUL Over Time (with Uncertainty)",
       "type": "timeseries",
       "gridPos": { "x": 6, "y": 0, "w": 18, "h": 8 },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "lineWidth": 2, "fillOpacity": 10 },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red",    "value": 0   },
-              { "color": "orange", "value": 60  },
-              { "color": "green",  "value": 120 }
+          "custom": { 
+            "lineWidth": 2, 
+            "fillOpacity": 10,
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Upper Bound" },
+            "properties": [
+              { "id": "custom.lineWidth", "value": 0 },
+              { "id": "custom.fillBelowTo", "value": "Lower Bound" },
+              { "id": "color", "value": { "fixedColor": "rgba(0, 212, 255, 0.2)", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Lower Bound" },
+            "properties": [
+              { "id": "custom.lineWidth", "value": 0 },
+              { "id": "color", "value": { "fixedColor": "rgba(0, 212, 255, 0)", "mode": "fixed" } }
             ]
           }
-        }
+        ]
       },
-      "targets": [{
-        "expr": "machine_rul{machine_id=\"M1\"}",
-        "legendFormat": "RUL — M1"
-      }]
+      "targets": [
+        {
+          "expr": "machine_rul{machine_id=\"M1\"}",
+          "legendFormat": "RUL — M1",
+          "refId": "A"
+        },
+        {
+          "expr": "machine_rul{machine_id=\"M1\"} + machine_rul_std{machine_id=\"M1\"}",
+          "legendFormat": "Upper Bound",
+          "refId": "B"
+        },
+        {
+          "expr": "machine_rul{machine_id=\"M1\"} - machine_rul_std{machine_id=\"M1\"}",
+          "legendFormat": "Lower Bound",
+          "refId": "C"
+        }
+      ]
     },
 
     {

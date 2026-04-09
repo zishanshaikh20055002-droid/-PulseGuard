@@ -1,14 +1,3 @@
-"""
-mqtt_publisher.py — simulates an edge device publishing sensor data.
-
-Two modes (set via PUBLISHER_MODE env var or MQTT control topic):
-  replay  — reads from X.npy, inverse-transforms to real sensor values
-  random  — generates random values within realistic physical ranges
-
-Run standalone:  python -m src.mqtt_publisher
-Docker service:  see docker-compose.yml
-"""
-
 import json
 import os
 import time
@@ -18,11 +7,7 @@ import numpy as np
 import joblib
 import paho.mqtt.client as mqtt
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [PUBLISHER] %(message)s",
-    datefmt="%H:%M:%S",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [PUBLISHER] %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger(__name__)
 
 MQTT_BROKER   = os.getenv("MQTT_BROKER", "mosquitto")
@@ -33,33 +18,19 @@ CONTROL_TOPIC = "sensors/control/mode"
 PUBLISH_RATE  = float(os.getenv("PUBLISH_RATE", "1.0"))
 
 BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_PATH   = os.path.join(BASE_DIR, "data", "X.npy")
-SCALER_PATH = os.path.join(BASE_DIR, "data", "scaler.pkl")
-
-# Realistic ranges from ai4i2020 dataset
-SENSOR_RANGES = {
-    "air_temperature":  (295.0, 304.0),
-    "temperature":      (305.0, 313.0),
-    "rotational_speed": (1168.0, 2886.0),
-    "torque":           (3.8, 76.6),
-    "tool_wear":        (0.0, 253.0),
-}
+# Point to the new CMAPSS data and scaler
+DATA_PATH   = os.path.join(BASE_DIR, "data", "X_cmapss.npy")
+SCALER_PATH = os.path.join(BASE_DIR, "data", "scaler_cmapss.pkl")
 
 current_mode = os.getenv("PUBLISHER_MODE", "replay")
 
-
 def generate_random(step: int) -> dict:
-    air = random.uniform(*SENSOR_RANGES["air_temperature"])
+    # Generate dummy random data for all 14 features if replay fails
     return {
-        "machine_id":      MACHINE_ID,
-        "step":            step,
-        "air_temperature": round(air, 3),
-        "temperature":     round(air + random.uniform(8.0, 12.0), 3),
-        "rotational_speed": round(random.uniform(*SENSOR_RANGES["rotational_speed"]), 1),
-        "torque":          round(random.uniform(*SENSOR_RANGES["torque"]), 2),
-        "tool_wear":       round(random.uniform(*SENSOR_RANGES["tool_wear"]), 1),
+        "machine_id": MACHINE_ID,
+        "step": step,
+        "features": [round(random.uniform(0, 100), 2) for _ in range(14)]
     }
-
 
 def main():
     global current_mode
@@ -114,14 +85,12 @@ def main():
                 sample  = X[replay_idx % len(X)]
                 last    = sample[-1]
                 orig    = scaler.inverse_transform([last])[0]
+                
+                # Bundle the 14 features into an array
                 reading = {
-                    "machine_id":      MACHINE_ID,
-                    "step":            step,
-                    "air_temperature": round(float(orig[0]), 3),
-                    "temperature":     round(float(orig[1]), 3),
-                    "rotational_speed": round(float(orig[2]), 1),
-                    "torque":          round(float(orig[3]), 2),
-                    "tool_wear":       round(float(orig[4]), 1),
+                    "machine_id": MACHINE_ID,
+                    "step": step,
+                    "features": [round(float(x), 4) for x in orig]
                 }
                 replay_idx += 1
             else:
@@ -129,12 +98,7 @@ def main():
 
             result = client.publish(PUBLISH_TOPIC, json.dumps(reading), qos=1)
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                logger.info(
-                    f"[{current_mode.upper()}] step={step} "
-                    f"temp={reading['temperature']:.1f}K "
-                    f"torque={reading['torque']:.1f}Nm "
-                    f"wear={reading['tool_wear']:.1f}min"
-                )
+                logger.info(f"[{current_mode.upper()}] step={step} sent 14 sensor features")
             step += 1
             time.sleep(PUBLISH_RATE)
 
@@ -146,7 +110,6 @@ def main():
 
     client.loop_stop()
     client.disconnect()
-
 
 if __name__ == "__main__":
     main()
