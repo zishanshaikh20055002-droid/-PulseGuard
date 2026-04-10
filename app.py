@@ -1,12 +1,5 @@
 """
 app.py — FastAPI application (MQTT-powered v2).
-
-On startup:
-  - Stores the asyncio event loop in WSManager
-  - Starts MQTT subscriber in a background daemon thread
-
-Data flow:
-  publisher → MQTT broker → subscriber → inference → WebSocket + Prometheus
 """
 
 import asyncio
@@ -48,8 +41,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ── Paths ─────────────────────────────────────────────────────
 MODEL_PATH  = os.path.join(BASE_DIR, "models", "model_cmapss_int8.tflite")
-SCALER_PATH = os.path.join(BASE_DIR, "data",   "scaler_cmapss.pkl")
-DATA_PATH   = os.path.join(BASE_DIR, "data",   "X_cmapss.npy")
+SCALER_PATH = os.path.join(BASE_DIR, "data", "scaler_cmapss.pkl")
 
 MQTT_BROKER = os.getenv("MQTT_BROKER", "mosquitto")
 MQTT_PORT   = int(os.getenv("MQTT_PORT", "1883"))
@@ -98,7 +90,6 @@ init_db()
 ws_connections: dict = defaultdict(int)
 WS_MAX_PER_IP = 3
 
-
 # ── Startup ───────────────────────────────────────────────────
 @app.on_event("startup")
 async def startup():
@@ -112,7 +103,6 @@ async def startup():
         name="mqtt-subscriber",
     )
     thread.start()
-
 
 # ── Auth ──────────────────────────────────────────────────────
 @app.post("/auth/login", response_model=Token, tags=["Auth"])
@@ -134,12 +124,10 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     )
     return {"access_token": token, "token_type": "bearer"}
 
-
 @app.get("/auth/me", response_model=User, tags=["Auth"])
 @limiter.limit("60/minute")
 def get_me(request: Request, current_user: User = Depends(get_current_user)):
     return current_user
-
 
 # ── General ───────────────────────────────────────────────────
 @app.get("/", tags=["General"])
@@ -147,11 +135,9 @@ def get_me(request: Request, current_user: User = Depends(get_current_user)):
 def home(request: Request):
     return {"message": "Edge AI Predictive Maintenance API v2 🚀 (MQTT-powered)"}
 
-
 @app.get("/health", tags=["General"])
 def health():
     return {"status": "ok"}
-
 
 # ── Mode control ──────────────────────────────────────────────
 @app.post("/set_mode/{new_mode}", tags=["Control"])
@@ -180,7 +166,6 @@ def set_mode(
     simulation_mode_info.info({"mode": cleaned})
     print(f"[MODE] '{cleaned}' set by '{current_user.username}'")
     return {"mode": cleaned, "set_by": current_user.username}
-
 
 # ── WebSocket ─────────────────────────────────────────────────
 @app.websocket("/ws")

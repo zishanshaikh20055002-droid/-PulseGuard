@@ -1,7 +1,7 @@
 import json, os, time, logging, warnings
 import numpy as np
 import paho.mqtt.client as mqtt
-from collections import deque
+from src.ingestion import HardwareAgnosticBuffer
 
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -11,10 +11,10 @@ logger.setLevel(logging.INFO)
 MQTT_BROKER = os.getenv("MQTT_BROKER", "mosquitto")
 MQTT_PORT   = int(os.getenv("MQTT_PORT", "1883"))
 WINDOW_SIZE = 30
-NUM_FEATURES = 14
+NUM_FEATURES = 14  # CMAPSS uses 14
 N_PASSES    = 30
 
-window_buffer = deque(maxlen=WINDOW_SIZE)
+ingestion_buffer = HardwareAgnosticBuffer(window_size=WINDOW_SIZE, num_features=NUM_FEATURES)
 
 def start_subscriber(interpreter, input_details, output_details, scaler, manager, metrics):
     from src.database import insert_data
@@ -23,43 +23,35 @@ def start_subscriber(interpreter, input_details, output_details, scaler, manager
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
             client.subscribe("sensors/+/data")
-            logger.info("[MQTT] Connected and subscribed to CMAPSS stream")
+            logger.info("[MQTT] Connected and subscribed to CMAPSS sensor stream")
 
     def on_message(client, userdata, msg):
-        global window_buffer
-        
         try:
             data = json.loads(msg.payload.decode())
         except Exception:
             return
             
         machine_id = data.get("machine_id", "M1")
-        features = data.get("features", [])
+        step = int(data.get("step", 0))
+        raw_features = data.get("features", [])
         
-        if len(features) != NUM_FEATURES:
+        ingestion_buffer.process_payload(machine_id, step, raw_features)
+        raw_window = ingestion_buffer.get_valid_window(machine_id)
+        
+        if raw_window is None:
             return
 
-        scaled = scaler.transform([features])[0].tolist()
-        window_buffer.append(scaled)
-        
-        if len(window_buffer) < WINDOW_SIZE:
-            return
-
-        # Base sample
-        base_sample = np.array(window_buffer, dtype=np.float32).reshape(1, WINDOW_SIZE, NUM_FEATURES)
+        scaled_window = scaler.transform(raw_window[0])
+        base_sample = scaled_window.reshape(1, WINDOW_SIZE, NUM_FEATURES).astype(np.float32)
+        clean_features = raw_window[0][-1]
         
         t0 = time.time()
-        
         rul_predictions = []
         stage_predictions = []
         
         for _ in range(N_PASSES):
-            # THE FIX: Inject micro-noise to the input array using Numpy!
-            # This guarantees variance, simulating MC Dropout manually.
             noise = np.random.normal(0, 0.01, base_sample.shape).astype(np.float32)
-            noisy_sample = base_sample + noise
-            
-            interpreter.set_tensor(input_details[0]["index"], noisy_sample)
+            interpreter.set_tensor(input_details[0]["index"], base_sample + noise)
             interpreter.invoke()
             
             rul_predictions.append(interpreter.get_tensor(output_details[0]["index"])[0][0])
@@ -86,25 +78,22 @@ def start_subscriber(interpreter, input_details, output_details, scaler, manager
                 metrics["rul_std_gauge"].labels(machine_id=machine_id).set(rul_std)
             metrics["health_status_counter"].labels(machine_id=machine_id, status=status).inc()
             metrics["inference_latency"].labels(machine_id=machine_id).observe(latency)
-            metrics["sensor_temperature"].labels(machine_id=machine_id).set(features[0])
-            metrics["sensor_torque"].labels(machine_id=machine_id).set(features[1])
-            metrics["sensor_tool_wear"].labels(machine_id=machine_id).set(features[2])
-            metrics["sensor_speed"].labels(machine_id=machine_id).set(features[3])
         except Exception:
             pass
 
         result = sanitize_sensor_dict({
             "machine_id": machine_id,
-            "step": int(data.get("step", 0)),
+            "step": step,
             "RUL": prediction,
             "RUL_std": rul_std,
             "status": status,
             "stage_probs": [round(p, 3) for p in stage_probs],
-            "temperature": features[0],
-            "air_temperature": features[1],
-            "torque": features[2],
-            "tool_wear": features[3],
-            "speed": features[4],
+            # Map first 5 CMAPSS features to UI so telemetry bars animate
+            "temperature": float(clean_features[0]),
+            "air_temperature": float(clean_features[1]),
+            "torque": float(clean_features[2]),
+            "tool_wear": float(clean_features[3]),
+            "speed": float(clean_features[4]),
         })
         
         try:
@@ -113,7 +102,7 @@ def start_subscriber(interpreter, input_details, output_details, scaler, manager
             pass
 
         manager.broadcast_from_thread(result)
-        logger.info(f"[MQTT] {machine_id} RUL={prediction:.1f}±{rul_std:.1f} {status} {latency*1000:.2f}ms")
+        logger.info(f"[MQTT] {machine_id} Step={step} RUL={prediction:.1f}±{rul_std:.1f} {status} {latency*1000:.2f}ms")
 
     client = mqtt.Client(client_id="fastapi-subscriber")
     client.on_connect = on_connect

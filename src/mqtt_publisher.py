@@ -1,115 +1,70 @@
+import time
 import json
 import os
-import time
 import logging
-import random
-import numpy as np
-import joblib
+import pandas as pd
 import paho.mqtt.client as mqtt
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [PUBLISHER] %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger(__name__)
 
-MQTT_BROKER   = os.getenv("MQTT_BROKER", "mosquitto")
-MQTT_PORT     = int(os.getenv("MQTT_PORT", "1883"))
-MACHINE_ID    = os.getenv("MACHINE_ID", "M1")
-PUBLISH_TOPIC = f"sensors/{MACHINE_ID}/data"
-CONTROL_TOPIC = "sensors/control/mode"
-PUBLISH_RATE  = float(os.getenv("PUBLISH_RATE", "1.0"))
+MQTT_BROKER = os.getenv("MQTT_BROKER", "mosquitto")
+MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
 
-BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Point to the new CMAPSS data and scaler
-DATA_PATH   = os.path.join(BASE_DIR, "data", "X_cmapss.npy")
-SCALER_PATH = os.path.join(BASE_DIR, "data", "scaler_cmapss.pkl")
+# Using the complete run-to-failure training file so we have plenty of data
+DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "train_FD001.txt")
 
-current_mode = os.getenv("PUBLISHER_MODE", "replay")
-
-def generate_random(step: int) -> dict:
-    # Generate dummy random data for all 14 features if replay fails
-    return {
-        "machine_id": MACHINE_ID,
-        "step": step,
-        "features": [round(random.uniform(0, 100), 2) for _ in range(14)]
-    }
-
-def main():
-    global current_mode
-
-    logger.info("Loading replay data...")
-    try:
-        X      = np.load(DATA_PATH)
-        scaler = joblib.load(SCALER_PATH)
-        logger.info(f"X.npy: {X.shape}")
-    except Exception as e:
-        logger.warning(f"Could not load replay data: {e} — using random mode")
-        X = None
-        scaler = None
-        current_mode = "random"
-
-    def on_connect(client, userdata, flags, rc):
-        if rc == 0:
-            logger.info(f"Connected to {MQTT_BROKER}:{MQTT_PORT}")
-            client.subscribe(CONTROL_TOPIC)
-        else:
-            logger.error(f"Connection failed rc={rc}")
-
-    def on_message(client, userdata, msg):
-        global current_mode
-        if msg.topic == CONTROL_TOPIC:
-            new_mode = msg.payload.decode().strip().lower()
-            if new_mode in ("replay", "random"):
-                current_mode = new_mode
-                logger.info(f"Mode → {current_mode}")
-
-    client = mqtt.Client(client_id=f"publisher-{MACHINE_ID}")
-    client.on_connect = on_connect
-    client.on_message = on_message
-
+def start_publishing():
+    client = mqtt.Client(client_id="publisher-M1")
+    
     while True:
         try:
-            client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
+            client.connect(MQTT_BROKER, MQTT_PORT, 60)
+            logger.info(f"Connected to mosquitto:{MQTT_PORT}")
             break
         except Exception as e:
-            logger.error(f"Broker not ready: {e} — retrying in 3s")
+            logger.error(f"Connection failed. Retrying in 3s...")
             time.sleep(3)
 
     client.loop_start()
-    logger.info(f"Publishing to {PUBLISH_TOPIC} | mode={current_mode}")
-
-    step = 200
-    replay_idx = step
-
-    while True:
-        try:
-            if current_mode == "replay" and X is not None:
-                sample  = X[replay_idx % len(X)]
-                last    = sample[-1]
-                orig    = scaler.inverse_transform([last])[0]
-                
-                # Bundle the 14 features into an array
-                reading = {
-                    "machine_id": MACHINE_ID,
-                    "step": step,
-                    "features": [round(float(x), 4) for x in orig]
-                }
-                replay_idx += 1
-            else:
-                reading = generate_random(step)
-
-            result = client.publish(PUBLISH_TOPIC, json.dumps(reading), qos=1)
-            if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                logger.info(f"[{current_mode.upper()}] step={step} sent 14 sensor features")
-            step += 1
-            time.sleep(PUBLISH_RATE)
-
-        except KeyboardInterrupt:
-            break
-        except Exception as e:
-            logger.error(f"Publish error: {e}")
-            time.sleep(1)
-
-    client.loop_stop()
-    client.disconnect()
+    logger.info("Loading NASA CMAPSS dataset...")
+    
+    columns = ['unit_number', 'time_in_cycles', 'op_setting_1', 'op_setting_2', 'op_setting_3'] + \
+              [f'sensor_measurement_{i}' for i in range(1, 22)]
+    df = pd.read_csv(DATA_PATH, sep=r'\s+', names=columns)
+    
+    # Filter to only Machine 1
+    df_m1 = df[df['unit_number'] == 1].copy()
+    
+    # 14 features used in the CMAPSS model
+    features = [f'sensor_measurement_{i}' for i in [2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 17, 20, 21]]
+    
+    # Fast forward to cycle 100 out of 192 to observe active degradation
+    start_index = 100
+    logger.info(f"Fast-forwarding to step {start_index} to observe active degradation...")
+    
+    # Convert to a Python list of dictionaries first to completely bypass Pandas index issues
+    records = df_m1[features].to_dict('records')
+    
+    # Slice the clean Python list
+    sliced_records = records[start_index:]
+    
+    step = start_index
+    for row in sliced_records:
+        # Extract the values from the dictionary in the correct order
+        feature_values = [row[feat] for feat in features]
+        
+        payload = {
+            "machine_id": "M1",
+            "step": step,
+            "features": feature_values
+        }
+        
+        client.publish("sensors/M1/data", json.dumps(payload))
+        logger.info(f"[REPLAY] step={step} sent 14 sensor features (CMAPSS)")
+        
+        step += 1
+        time.sleep(1.0)
 
 if __name__ == "__main__":
-    main()
+    start_publishing()
