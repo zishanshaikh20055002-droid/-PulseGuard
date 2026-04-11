@@ -147,6 +147,150 @@ Environment consistency across systems
 Simplified setup and scaling
 
 
+4.11 Complete Machine Diagnosis (Real-Time)
+
+In addition to RUL and health stage, the system now streams full diagnosis fields per machine:
+
+Electrical telemetry: voltage, current, power
+
+Mechanical telemetry: speed, torque, vibration, tool wear
+
+Thermal telemetry: process and air temperatures
+
+Machine KPIs: health index, failure probability, time-to-failure (hours)
+
+Fault localization: likely component (stator/rotor/bearing/cooling/power_supply/lubrication),
+fault type, severity, confidence, probable causes, and recommended actions
+
+New diagnosis APIs:
+
+GET /diagnosis/latest/{machine_id}
+
+GET /diagnosis/recent/{machine_id}?limit=100
+
+
+4.12 Supervised Fault Localization (Phase 2)
+
+The system now supports a trainable component-localization model that can replace
+rule-only fault part ranking when a trained artifact is available.
+
+Runtime behavior:
+
+If models/fault_localizer.pkl exists, live diagnosis uses ML component probabilities.
+
+If missing or invalid, the system automatically falls back to rule-based localization.
+
+Model endpoints:
+
+GET /diagnosis/model/fault-localizer
+
+POST /diagnosis/model/fault-localizer/reload (admin)
+
+Training workflow:
+
+1) Create labeled dataset CSV from your plant logs using data/fault_localization_template.csv schema.
+
+2) Optionally bootstrap from historical diagnosis DB:
+
+python -m src.export_fault_training_data --min-confidence 0.6
+
+3) Train model:
+
+python -m src.train_fault_localization --input data/fault_localization_labeled.csv
+
+4) Reload model in running API:
+
+POST /diagnosis/model/fault-localizer/reload
+
+
+4.13 Alarm Policy and Maintenance Priority
+
+Alarm levels are generated in real time from failure probability, fault severity,
+confidence, and time-to-failure windows.
+
+Outputs now include:
+
+alarm_level (INFO, ADVISORY, ALERT, EMERGENCY)
+
+maintenance_priority (P4 to P1)
+
+alarm_reasons (list)
+
+recommended_window_hours
+
+Tuning env vars:
+
+ALARM_FAILURE_WARN
+
+ALARM_FAILURE_CRIT
+
+ALARM_TTF_WARN_HOURS
+
+ALARM_TTF_CRIT_HOURS
+
+
+4.14 Industrial Hardening (Fleet + Feedback + Auto-Retraining)
+
+The platform now includes three production hardening loops:
+
+1) Multi-machine fleet operations:
+
+GET /fleet/overview
+
+GET /fleet/machines
+
+The dashboard can monitor and rank all active machines by alert pressure,
+while still allowing deep drill-down on a selected machine.
+
+2) Human feedback relabel loop:
+
+POST /feedback/relabel
+
+GET /feedback/relabels?resolved=false&limit=20
+
+POST /feedback/relabels/{feedback_id}/resolve (admin)
+
+Operators can submit corrected fault-part labels for any diagnosis record.
+Resolved feedback is retained for supervised retraining and traceability.
+
+3) Scheduled auto-retraining with drift detection:
+
+GET /retraining/status
+
+POST /retraining/run-now (admin)
+
+The scheduler periodically evaluates feature drift against the baseline profile
+stored in models/fault_localizer_meta.json (feature statistics exported at training time).
+Retraining can be triggered by drift and/or enough resolved relabel samples,
+with cooldown and minimum-data gates.
+
+Scheduler and drift tuning environment variables:
+
+RETRAIN_ENABLED
+
+RETRAIN_CHECK_MINUTES
+
+RETRAIN_MIN_COOLDOWN_MINUTES
+
+RETRAIN_MIN_ROWS
+
+RETRAIN_MIN_FEEDBACK
+
+RETRAIN_MIN_CONFIDENCE
+
+RETRAIN_REQUIRE_DRIFT
+
+DRIFT_ZSCORE_THRESHOLD
+
+DRIFT_WINDOW_ROWS
+
+
+Training export note:
+
+python -m src.export_fault_training_data now merges resolved human feedback labels
+into the supervised target (fault_component) before retraining.
+
+
 
 ---
 
@@ -437,6 +581,78 @@ PUBLISH_RATE: Delay (seconds) between MQTT replay messages.
 PUBLISH_START_STEP: Initial replay index for CMAPSS stream.
 
 MACHINE_ID: Publisher machine/topic identifier (e.g., M1, M2).
+
+
+14.4 Real Hardware Sensor Ingestion
+
+The backend now accepts asynchronous per-sensor streams in addition to array payloads.
+
+Legacy topic (synchronized batch):
+
+sensors/{machine_id}/data
+
+Payload:
+
+{"machine_id":"M1","step":123,"features":[...14 values...]}
+
+Asynchronous topic (real hardware style):
+
+sensors/{machine_id}/feature/{feature_name}
+
+Payload:
+
+{"value":642.7,"timestamp":1712824000.123}
+
+Notes:
+
+The subscriber resamples asynchronous streams to a fixed model cadence before inference.
+
+Supported feature names are CMAPSS feature channels:
+
+sensor_measurement_2, sensor_measurement_3, sensor_measurement_4, sensor_measurement_7,
+sensor_measurement_8, sensor_measurement_9, sensor_measurement_11, sensor_measurement_12,
+sensor_measurement_13, sensor_measurement_14, sensor_measurement_15, sensor_measurement_17,
+sensor_measurement_20, sensor_measurement_21
+
+Resampling controls:
+
+ASYNC_RESAMPLE_HZ: fused output cadence for model windows.
+
+ASYNC_MAX_BUFFER_SECONDS: max sensor history retained per machine.
+
+
+14.5 Hardware Bridge Service
+
+An optional hardware bridge is available at src/hardware_bridge.py.
+
+Modes:
+
+emulate: heterogeneous asynchronous sensor rates for rapid testing.
+
+serial-jsonl: line-delimited JSON from real microcontrollers/PLCs over serial.
+
+Run with Docker profile:
+
+docker compose --profile hardware up -d --build
+
+
+14.6 Multimodal Multi-Task Model
+
+A new multimodal MTL architecture is provided for whole-machine health:
+
+src/model_multimodal_mtl.py
+
+Heads:
+
+head_rul: system-level RUL regression.
+
+head_faults: multi-label fault diagnostics.
+
+head_anomaly_score: unknown-behavior anomaly score.
+
+Training scaffold:
+
+src/train_multimodal_mtl.py
 
 
 ---

@@ -3,111 +3,318 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Edge AI Predictive Maintenance</title>
+  <title>Edge AI Fleet Operations</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg: #03050a; 
-      --panel: rgba(10, 14, 25, 0.45); 
-      --border: rgba(255, 255, 255, 0.06);
-      --accent: #00e5ff; 
-      --green: #00ff9d; 
-      --orange: #ffb700; 
-      --red: #ff3366; 
-      --text: #f8fafc; 
+      --bg: #03050a;
+      --panel: rgba(10, 14, 25, 0.45);
+      --border: rgba(255, 255, 255, 0.08);
+      --accent: #00e5ff;
+      --green: #00ff9d;
+      --orange: #ffb700;
+      --red: #ff3366;
+      --text: #f8fafc;
       --muted: #64748b;
-      --mono: 'Share Tech Mono', monospace; 
+      --mono: 'Share Tech Mono', monospace;
       --sans: 'Rajdhani', sans-serif;
     }
-    
-    body { 
-      font-family: var(--sans); background: var(--bg); color: var(--text); 
-      min-height: 100vh; padding: 32px; transition: background 0.8s ease; 
-      background-image: 
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+      background-image:
         radial-gradient(circle at 20% 0%, rgba(0, 229, 255, 0.05) 0%, transparent 40%),
         radial-gradient(circle at 80% 100%, rgba(0, 255, 157, 0.03) 0%, transparent 40%);
       background-attachment: fixed;
     }
 
-    /* ── Login Overlay ── */
-    #login-overlay { position:fixed; inset:0; background:rgba(3, 5, 10, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); display:flex; align-items:center; justify-content:center; z-index:1000; }
-    .login-card { background:var(--panel); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border:1px solid var(--border); border-radius:24px; padding:48px; width:400px; text-align:center; box-shadow: 0 30px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1); }
-    .login-card h2 { font-size:26px; font-weight:700; letter-spacing:6px; text-transform:uppercase; color:var(--text); margin-bottom:12px; }
-    .login-card p { font-size:15px; color:var(--muted); margin-bottom:36px; font-weight:500; }
-    .login-field { width:100%; background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:12px; color:var(--text); font-family:var(--mono); font-size:15px; padding:16px; margin-bottom:16px; outline:none; transition:all 0.3s ease; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); }
-    .login-field:focus { border-color:var(--accent); background:rgba(0, 229, 255, 0.02); }
-    .login-btn { width:100%; background:var(--text); color:#000; font-family:var(--sans); font-weight:700; font-size:16px; letter-spacing:3px; text-transform:uppercase; padding:16px; border:none; border-radius:12px; cursor:pointer; transition:all 0.3s ease; margin-top:8px; }
-    .login-btn:hover { background:var(--accent); box-shadow: 0 0 20px rgba(0,229,255,0.4); transform: translateY(-1px); }
-    .login-error { color:var(--red); font-size:14px; margin-top:16px; min-height:20px; font-weight:500; }
+    #login-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 5, 10, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
 
-    /* ── Dashboard Layout ── */
-    #dashboard { display:none; max-width: 1440px; margin: 0 auto; }
-    
-    header { display:flex; align-items:center; justify-content:space-between; margin-bottom:32px; padding-bottom:24px; border-bottom:1px solid var(--border); }
-    .logo { display:flex; align-items:center; gap:16px; }
-    .logo-icon { width:48px; height:48px; background: rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:20px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-    h1 { font-size:28px; font-weight:600; letter-spacing:3px; text-transform:uppercase; color:var(--text); margin:0;}
-    .node-id { color:var(--accent); font-weight:400; font-family:var(--mono); letter-spacing:1px; }
-    
-    .header-right { display:flex; align-items:center; gap:24px; }
-    .user-badge { font-family:var(--mono); font-size:13px; color:var(--muted); padding:8px 16px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:10px; }
-    .conn-status { font-family:var(--mono); font-size:13px; display:flex; align-items:center; gap:10px; color:var(--muted); }
-    .conn-dot { width:8px; height:8px; border-radius:50%; background:var(--muted); transition: all 0.3s ease; }
-    .conn-dot.live { background:var(--green); box-shadow:0 0 12px var(--green); animation:pulse 2s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-    .logout-btn { font-family:var(--mono); font-size:13px; color:var(--muted); background:transparent; border:1px solid transparent; border-radius:10px; padding:8px 16px; cursor:pointer; transition:all 0.3s ease; }
-    .logout-btn:hover { color:var(--text); background:rgba(255,255,255,0.05); }
+    .login-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px;
+      width: min(92vw, 420px);
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    }
 
-    /* ── Glass Panels ── */
-    .grid { display:grid; grid-template-columns: 380px 1fr; gap:24px; }
-    .grid-col-1, .grid-col-2 { display: flex; flex-direction: column; gap: 24px; }
-    
-    .panel { background:var(--panel); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border:1px solid var(--border); border-radius:24px; padding:28px; box-shadow: 0 10px 40px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05); }
-    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom:24px; }
-    .panel-title { font-family:var(--sans); font-size:15px; font-weight: 600; letter-spacing:3px; text-transform:uppercase; color:var(--muted); }
-    
-    /* Sleek Status Badge inside Header */
-    .status-badge { font-family:var(--mono); font-size:12px; font-weight:bold; letter-spacing:2px; padding:6px 14px; border-radius:20px; border:1px solid transparent; transition: all 0.5s ease; }
-    .status-badge.WAITING  { color:var(--muted); border-color:var(--border); background: rgba(255,255,255,0.02); }
-    .status-badge.HEALTHY  { color:var(--green); background: rgba(0,255,157,0.1); border-color: rgba(0,255,157,0.2); }
-    .status-badge.WARNING  { color:var(--orange); background: rgba(255,183,0,0.1); border-color: rgba(255,183,0,0.2); }
-    .status-badge.CRITICAL { color:var(--red); background: rgba(255,51,102,0.15); border-color: var(--red); box-shadow: 0 0 15px rgba(255,51,102,0.3); }
+    .login-card h2 {
+      font-size: 28px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
 
-    /* ── Asset Health Gauge ── */
-    .gauge-container { position: relative; height: 200px; display: flex; justify-content: center; margin-bottom: 16px; filter: drop-shadow(0 10px 15px rgba(0,0,0,0.3)); }
-    .gauge-text { position: absolute; bottom: 10px; text-align: center; width: 100%; }
-    .rul-value { font-family:var(--mono); font-size:64px; font-weight:300; color:var(--text); line-height: 1; transition: color 0.5s ease, text-shadow 0.5s ease; }
-    .rul-label { font-family:var(--mono); font-size:12px; color:var(--muted); letter-spacing: 3px; margin-top:4px; opacity: 0.7;}
+    .login-card p {
+      color: var(--muted);
+      margin-bottom: 26px;
+      letter-spacing: 1px;
+    }
 
-    /* ── Uncertainty ── */
-    .conf-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-family: var(--mono); font-size: 13px; color: var(--muted);}
-    .conf-bar-bg { height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; margin-bottom: 16px;}
-    .conf-bar-fill { height: 100%; width: 0%; background: var(--accent); transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1), background 0.6s ease; }
-    .rul-range { font-family: var(--mono); font-size: 13px; color: var(--text); text-align: center; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 12px; border: 1px solid var(--border); }
-    .sigma-highlight { color: var(--accent); font-weight: bold; }
+    .login-field {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: var(--mono);
+      padding: 13px;
+      margin-bottom: 12px;
+      outline: none;
+    }
 
-    /* ── Stats Grid ── */
-    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px;}
-    .stat-card { background: rgba(0,0,0,0.15); border: 1px solid var(--border); border-radius: 16px; padding: 16px; text-align: center; transition: background 0.3s ease;}
-    .stat-card:hover { background: rgba(255,255,255,0.02); }
-    .stat-val { font-family: var(--mono); font-size: 24px; color: var(--text); font-weight: 300;}
-    .stat-lbl { font-family: var(--sans); font-size: 12px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-top: 6px;}
+    .login-field:focus { border-color: var(--accent); }
 
-    /* ── Main Chart ── */
-    .chart-wrapper { height: 360px; width: 100%; }
+    .login-btn {
+      width: 100%;
+      background: var(--text);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
 
-    /* ── Sensor Telemetry ── */
-    .telemetry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
-    .telemetry-card { background: rgba(0,0,0,0.15); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
-    .tel-header { display: flex; justify-content: space-between; align-items:flex-end; margin-bottom: 14px; }
-    .tel-name { color: var(--muted); font-size: 13px; font-family: var(--sans); text-transform: uppercase; letter-spacing: 2px; font-weight:600;}
-    .tel-val { color: var(--text); font-size: 18px; font-family: var(--mono); font-weight: 300;}
-    .tel-bar-bg { height: 3px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden;}
-    .tel-bar-fill { height: 100%; width: 0%; border-radius: 2px; transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+    .login-btn:hover {
+      background: var(--accent);
+      box-shadow: 0 0 18px rgba(0, 229, 255, 0.35);
+    }
 
+    .login-error {
+      min-height: 18px;
+      margin-top: 12px;
+      color: var(--red);
+      font-size: 13px;
+    }
+
+    #dashboard { display: none; max-width: 1560px; margin: 0 auto; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .logo { display: flex; align-items: center; gap: 14px; }
+    .logo-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    h1 { font-size: 28px; letter-spacing: 2px; text-transform: uppercase; }
+    .node-id { color: var(--accent); font-family: var(--mono); font-weight: 400; }
+
+    .header-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .user-badge {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 12px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .conn-status { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+    .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    .conn-dot.live { background: var(--green); box-shadow: 0 0 10px var(--green); }
+    .logout-btn {
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-family: var(--mono);
+      cursor: pointer;
+    }
+
+    .grid { display: grid; grid-template-columns: 430px 1fr; gap: 18px; }
+    .grid-col { display: grid; gap: 18px; align-content: start; }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+    }
+
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .panel-title {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-weight: 600;
+    }
+
+    .status-badge {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 1px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      padding: 5px 10px;
+    }
+    .status-badge.WAITING { color: var(--muted); }
+    .status-badge.HEALTHY { color: var(--green); border-color: rgba(0,255,157,0.35); background: rgba(0,255,157,0.08); }
+    .status-badge.WARNING { color: var(--orange); border-color: rgba(255,183,0,0.35); background: rgba(255,183,0,0.08); }
+    .status-badge.CRITICAL { color: var(--red); border-color: rgba(255,51,102,0.5); background: rgba(255,51,102,0.12); }
+
+    .fault-pill {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 1px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 9px;
+    }
+    .fault-pill.INFO, .fault-pill.HEALTHY { color: var(--green); border-color: rgba(0,255,157,0.35); background: rgba(0,255,157,0.08); }
+    .fault-pill.ADVISORY, .fault-pill.WARNING { color: var(--orange); border-color: rgba(255,183,0,0.35); background: rgba(255,183,0,0.08); }
+    .fault-pill.ALERT, .fault-pill.EMERGENCY, .fault-pill.CRITICAL { color: var(--red); border-color: rgba(255,51,102,0.55); background: rgba(255,51,102,0.14); }
+
+    .fleet-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .fleet-kpi { border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.02); padding: 10px; }
+    .fleet-kpi .v { font-family: var(--mono); font-size: 21px; }
+    .fleet-kpi .l { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+    .fleet-list { display: grid; gap: 8px; max-height: 285px; overflow-y: auto; }
+    .fleet-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(0,0,0,0.25);
+      color: var(--text);
+      text-align: left;
+      padding: 10px;
+      cursor: pointer;
+      display: grid;
+      gap: 6px;
+    }
+    .fleet-item:hover { background: rgba(255,255,255,0.04); }
+    .fleet-item.active { border-color: rgba(0,229,255,0.7); box-shadow: 0 0 0 1px rgba(0,229,255,0.35) inset; }
+    .fleet-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .fleet-id { font-family: var(--mono); font-size: 14px; }
+    .fleet-meta { color: var(--muted); font-size: 12px; }
+
+    .gauge-container { position: relative; height: 190px; margin-bottom: 14px; }
+    .gauge-text { position: absolute; bottom: 8px; width: 100%; text-align: center; }
+    .rul-value { font-family: var(--mono); font-size: 58px; font-weight: 300; line-height: 1; }
+    .rul-label { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 2px; margin-top: 4px; }
+
+    .conf-row { display: flex; justify-content: space-between; color: var(--muted); font-family: var(--mono); font-size: 12px; margin-bottom: 6px; }
+    .conf-bar-bg { height: 4px; border-radius: 999px; background: rgba(255,255,255,0.06); overflow: hidden; margin-bottom: 10px; }
+    .conf-bar-fill { height: 100%; width: 0%; background: var(--accent); }
+    .rul-range { border: 1px solid var(--border); border-radius: 10px; background: rgba(0,0,0,0.2); padding: 10px; text-align: center; font-family: var(--mono); font-size: 12px; }
+    .sigma-highlight { color: var(--accent); }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .stat-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: rgba(0,0,0,0.2); text-align: center; }
+    .stat-val { font-family: var(--mono); font-size: 20px; }
+    .stat-lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+    .chart-wrapper { height: 320px; }
+
+    .telemetry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+    .telemetry-card { border: 1px solid var(--border); border-radius: 10px; background: rgba(0,0,0,0.2); padding: 10px; }
+    .tel-header { display: flex; justify-content: space-between; margin-bottom: 10px; gap: 8px; }
+    .tel-name { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+    .tel-val { font-family: var(--mono); font-size: 14px; }
+    .tel-bar-bg { height: 3px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; }
+    .tel-bar-fill { height: 100%; width: 0%; }
+
+    .diag-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .diag-card { border: 1px solid var(--border); border-radius: 10px; background: rgba(0,0,0,0.2); padding: 10px; }
+    .diag-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    .diag-value {
+      font-family: var(--mono);
+      font-size: 15px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .diag-list-title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 2px; margin: 10px 0 8px; }
+    .diag-list { list-style: none; display: grid; gap: 7px; }
+    .diag-list li { border: 1px solid var(--border); border-radius: 9px; background: rgba(0,0,0,0.2); padding: 8px; font-size: 13px; }
+
+    .form-grid { display: grid; gap: 9px; }
+    .form-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: rgba(0,0,0,0.3);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 9px;
+    }
+    .form-textarea { min-height: 62px; resize: vertical; }
+    .form-toggle { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+
+    .action-btn {
+      width: 100%;
+      border: 1px solid rgba(0,229,255,0.45);
+      border-radius: 9px;
+      background: rgba(0,229,255,0.2);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 1px;
+      padding: 10px;
+      cursor: pointer;
+    }
+    .action-btn:hover { background: rgba(0,229,255,0.3); }
+    .action-btn.subtle { border-color: var(--border); background: rgba(255,255,255,0.05); }
+    .action-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .feedback-msg { min-height: 16px; font-size: 12px; color: var(--muted); }
+
+    .queue-list, .drift-list { list-style: none; display: grid; gap: 7px; max-height: 180px; overflow-y: auto; }
+    .queue-list li, .drift-list li { border: 1px solid var(--border); border-radius: 9px; background: rgba(0,0,0,0.2); padding: 8px; font-size: 12px; }
+
+    .mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .mini-card { border: 1px solid var(--border); border-radius: 9px; background: rgba(255,255,255,0.02); padding: 8px; }
+    .mini-card .k { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+    .mini-card .v { font-family: var(--mono); font-size: 14px; margin-top: 4px; }
+
+    @media (max-width: 1260px) {
+      body { padding: 14px; }
+      .grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -115,7 +322,7 @@
 <div id="login-overlay">
   <div class="login-card">
     <h2>Edge Node</h2>
-    <p>Predictive Maintenance Terminal</p>
+    <p>Fleet Predictive Maintenance</p>
     <input class="login-field" type="text" id="username" placeholder="Username"/>
     <input class="login-field" type="password" id="password" placeholder="Password"/>
     <button class="login-btn" onclick="login()">Authenticate</button>
@@ -129,7 +336,7 @@
       <div class="logo-icon">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
       </div>
-      <h1>Command Center <span class="node-id">// M1</span></h1>
+      <h1>Fleet Command <span class="node-id" id="selectedMachineLabel">// M1</span></h1>
     </div>
     <div class="header-right">
       <div class="user-badge" id="userBadge">--</div>
@@ -142,15 +349,31 @@
   </header>
 
   <div class="grid">
-    
-    <div class="grid-col-1">
-      
+    <div class="grid-col">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Fleet Overview</div>
+          <div class="fault-pill INFO" id="fleetHealthPill">STABLE</div>
+        </div>
+        <div class="fleet-summary">
+          <div class="fleet-kpi">
+            <div class="v" id="fleetMachineCount">0</div>
+            <div class="l">Machines</div>
+          </div>
+          <div class="fleet-kpi">
+            <div class="v" id="fleetAlertCount">0</div>
+            <div class="l">Alerting</div>
+          </div>
+        </div>
+        <div class="fleet-list" id="fleetList"></div>
+      </div>
+
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">Asset Health</div>
           <div class="status-badge WAITING" id="status">AWAITING DATA</div>
         </div>
-        
+
         <div class="gauge-container">
           <canvas id="rulGauge"></canvas>
           <div class="gauge-text">
@@ -159,14 +382,12 @@
           </div>
         </div>
 
-        <div style="margin-top: 32px;">
-          <div class="conf-row">
-            <span>MODEL CONFIDENCE</span>
-            <span id="confPct" style="color:var(--text)">--%</span>
-          </div>
-          <div class="conf-bar-bg"><div class="conf-bar-fill" id="confBar"></div></div>
-          <div class="rul-range" id="rulRange">Uncertainty Bounds: ± ---</div>
+        <div class="conf-row">
+          <span>MODEL CONFIDENCE</span>
+          <span id="confPct" style="color:var(--text)">--%</span>
         </div>
+        <div class="conf-bar-bg"><div class="conf-bar-fill" id="confBar"></div></div>
+        <div class="rul-range" id="rulRange">Bounds: ± ---</div>
       </div>
 
       <div class="panel">
@@ -174,71 +395,137 @@
           <div class="panel-title">Telemetry Stats</div>
         </div>
         <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-val" id="sigma">--</div>
-            <div class="stat-lbl">Std Dev (σ)</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-val" id="stepCount">0</div>
-            <div class="stat-lbl">Processed Steps</div>
-          </div>
+          <div class="stat-card"><div class="stat-val" id="sigma">--</div><div class="stat-lbl">Std Dev</div></div>
+          <div class="stat-card"><div class="stat-val" id="stepCount">0</div><div class="stat-lbl">Step</div></div>
+          <div class="stat-card"><div class="stat-val" id="ttf">--</div><div class="stat-lbl">TTF</div></div>
+          <div class="stat-card"><div class="stat-val" id="failureProb">--</div><div class="stat-lbl">Failure %</div></div>
+          <div class="stat-card"><div class="stat-val" id="healthIndex">--</div><div class="stat-lbl">Health</div></div>
         </div>
       </div>
 
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Human Relabel Loop</div>
+          <div class="fault-pill ADVISORY" id="feedbackRolePill">OPERATOR</div>
+        </div>
+
+        <div class="mini-grid" style="margin-bottom:8px;">
+          <div class="mini-card"><div class="k">Predicted</div><div class="v" id="predictedComponent">--</div></div>
+          <div class="mini-card"><div class="k">Record ID</div><div class="v" id="relabelPredictionId">--</div></div>
+        </div>
+
+        <div class="form-grid">
+          <div>
+            <div class="form-label">Corrected Component</div>
+            <select class="form-select" id="correctedComponent">
+              <option value="stator">stator</option>
+              <option value="rotor">rotor</option>
+              <option value="bearing">bearing</option>
+              <option value="cooling">cooling</option>
+              <option value="lubrication">lubrication</option>
+              <option value="power_supply">power_supply</option>
+              <option value="shaft">shaft</option>
+              <option value="coupling">coupling</option>
+              <option value="sensor_fault">sensor_fault</option>
+              <option value="normal">normal</option>
+            </select>
+          </div>
+
+          <div>
+            <div class="form-label">Operator Notes</div>
+            <textarea class="form-textarea" id="relabelNotes" placeholder="Why this relabel is needed..."></textarea>
+          </div>
+
+          <label class="form-toggle" id="relabelResolvedWrap">
+            <input type="checkbox" id="relabelResolved"/>
+            Mark as resolved (admin)
+          </label>
+
+          <button class="action-btn" id="submitRelabelBtn" onclick="submitRelabel()">Submit Relabel</button>
+          <div class="feedback-msg" id="relabelMessage"></div>
+
+          <div class="diag-list-title">Pending Feedback Queue</div>
+          <ul class="queue-list" id="feedbackQueue"></ul>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Drift + Auto-Retraining</div>
+          <div class="fault-pill INFO" id="retrainStatePill">IDLE</div>
+        </div>
+
+        <div class="mini-grid" style="margin-bottom:10px;">
+          <div class="mini-card"><div class="k">Drift Score</div><div class="v" id="driftScore">0.000</div></div>
+          <div class="mini-card"><div class="k">Drift State</div><div class="v" id="driftState">unknown</div></div>
+          <div class="mini-card"><div class="k">Rows Evaluated</div><div class="v" id="driftRows">0</div></div>
+          <div class="mini-card"><div class="k">Decision</div><div class="v" id="retrainDecision">--</div></div>
+          <div class="mini-card"><div class="k">Pending Feedback</div><div class="v" id="retrainPendingFeedback">0</div></div>
+          <div class="mini-card"><div class="k">Ready Feedback</div><div class="v" id="retrainReadyFeedback">0</div></div>
+        </div>
+
+        <div class="form-grid">
+          <div>
+            <div class="form-label">Manual Retrain Reason</div>
+            <input class="form-input" id="retrainReason" value="fleet anomaly review"/>
+          </div>
+          <button class="action-btn" id="retrainBtn" onclick="triggerRetrain()">Trigger Retraining</button>
+          <div class="feedback-msg" id="retrainMessage"></div>
+
+          <div class="diag-list-title">Top Drifted Features</div>
+          <ul class="drift-list" id="driftFeatures"></ul>
+
+          <div class="diag-list-title">Latest Run</div>
+          <ul class="diag-list" id="retrainLastRun"></ul>
+        </div>
+      </div>
     </div>
 
-    <div class="grid-col-2">
-      
+    <div class="grid-col">
       <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title">Degradation Trajectory</div>
-        </div>
-        <div class="chart-wrapper">
-          <canvas id="rulChart"></canvas>
-        </div>
+        <div class="panel-header"><div class="panel-title">Degradation Trajectory</div></div>
+        <div class="chart-wrapper"><canvas id="rulChart"></canvas></div>
       </div>
 
       <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title">Live Sensor Stream</div>
-        </div>
+        <div class="panel-header"><div class="panel-title">Live Sensor Stream</div></div>
         <div class="telemetry-grid">
-          
-          <div class="telemetry-card">
-            <div class="tel-header">
-              <span class="tel-name">Process Temp</span>
-              <span class="tel-val" id="temp">--</span>
-            </div>
-            <div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-temp" style="background:var(--accent)"></div></div>
-          </div>
-
-          <div class="telemetry-card">
-            <div class="tel-header">
-              <span class="tel-name">Air Temp</span>
-              <span class="tel-val" id="air">--</span>
-            </div>
-            <div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-air" style="background:#a78bfa"></div></div>
-          </div>
-
-          <div class="telemetry-card">
-            <div class="tel-header">
-              <span class="tel-name">Torque</span>
-              <span class="tel-val" id="torque">--</span>
-            </div>
-            <div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-torque" style="background:var(--orange)"></div></div>
-          </div>
-
-          <div class="telemetry-card">
-            <div class="tel-header">
-              <span class="tel-name">Tool Wear</span>
-              <span class="tel-val" id="wear">--</span>
-            </div>
-            <div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-wear" style="background:var(--red)"></div></div>
-          </div>
-
+          <div class="telemetry-card"><div class="tel-header"><span class="tel-name">Process Temp</span><span class="tel-val" id="temp">--</span></div><div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-temp" style="background:var(--accent)"></div></div></div>
+          <div class="telemetry-card"><div class="tel-header"><span class="tel-name">Air Temp</span><span class="tel-val" id="air">--</span></div><div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-air" style="background:#60a5fa"></div></div></div>
+          <div class="telemetry-card"><div class="tel-header"><span class="tel-name">Torque</span><span class="tel-val" id="torque">--</span></div><div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-torque" style="background:var(--orange)"></div></div></div>
+          <div class="telemetry-card"><div class="tel-header"><span class="tel-name">Tool Wear</span><span class="tel-val" id="wear">--</span></div><div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-wear" style="background:var(--red)"></div></div></div>
+          <div class="telemetry-card"><div class="tel-header"><span class="tel-name">Speed (RPM)</span><span class="tel-val" id="speed">--</span></div><div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-speed" style="background:#34d399"></div></div></div>
+          <div class="telemetry-card"><div class="tel-header"><span class="tel-name">Voltage (V)</span><span class="tel-val" id="voltage">--</span></div><div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-voltage" style="background:#60a5fa"></div></div></div>
+          <div class="telemetry-card"><div class="tel-header"><span class="tel-name">Current (A)</span><span class="tel-val" id="current">--</span></div><div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-current" style="background:#f97316"></div></div></div>
+          <div class="telemetry-card"><div class="tel-header"><span class="tel-name">Power (kW)</span><span class="tel-val" id="power">--</span></div><div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-power" style="background:#22d3ee"></div></div></div>
+          <div class="telemetry-card"><div class="tel-header"><span class="tel-name">Vibration RMS</span><span class="tel-val" id="vibration">--</span></div><div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-vibration" style="background:#facc15"></div></div></div>
+          <div class="telemetry-card"><div class="tel-header"><span class="tel-name">Efficiency (%)</span><span class="tel-val" id="efficiency">--</span></div><div class="tel-bar-bg"><div class="tel-bar-fill" id="bar-efficiency" style="background:#10b981"></div></div></div>
         </div>
       </div>
 
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Fault Localization</div>
+          <div class="fault-pill LOW" id="faultSeverity">LOW</div>
+        </div>
+
+        <div class="diag-grid">
+          <div class="diag-card"><div class="diag-label">Likely Faulted Part</div><div class="diag-value" id="faultComponent">--</div></div>
+          <div class="diag-card"><div class="diag-label">Fault Type</div><div class="diag-value" id="faultType">--</div></div>
+          <div class="diag-card"><div class="diag-label">Diagnosis Confidence</div><div class="diag-value" id="faultConfidence">--</div></div>
+          <div class="diag-card"><div class="diag-label">Model Source</div><div class="diag-value" id="faultModel">--</div></div>
+          <div class="diag-card"><div class="diag-label">Alarm / Priority</div><div class="diag-value" id="alarmSummary">--</div></div>
+        </div>
+
+        <div class="diag-list-title">Probable Causes</div>
+        <ul class="diag-list" id="faultCauses"></ul>
+
+        <div class="diag-list-title">Recommended Actions</div>
+        <ul class="diag-list" id="faultActions"></ul>
+
+        <div class="diag-list-title">Alarm Reasons</div>
+        <ul class="diag-list" id="alarmReasons"></ul>
+      </div>
     </div>
   </div>
 </div>
@@ -251,8 +538,50 @@ const API_ORIGIN = (() => {
 })();
 const WS_ORIGIN = API_ORIGIN.replace(/^http/, 'ws');
 
-let token = null, userRole = null, ws = null;
-let stepCount = 0;
+let token = null;
+let userRole = null;
+let username = null;
+let ws = null;
+let wsHeartbeat = null;
+let fleetPollInterval = null;
+let retrainPollInterval = null;
+let feedbackPollInterval = null;
+
+let selectedMachine = 'M1';
+let latestPredictionId = null;
+
+const machineSnapshots = new Map();
+const machineSeries = new Map();
+
+const SELECTED_RENDER_INTERVAL_MS = 350;
+const FLEET_RENDER_INTERVAL_MS = 700;
+const CHART_RENDER_INTERVAL_MS = 450;
+
+let pendingSelectedSnapshot = null;
+let selectedRenderTimer = null;
+let lastSelectedRenderAt = 0;
+
+let fleetRenderTimer = null;
+let lastFleetRenderAt = 0;
+
+let pendingChartMachineId = null;
+let chartRenderTimer = null;
+let lastChartRenderAt = 0;
+
+let suppressDashboardRender = false;
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function normalizeMachineId(value) {
+  return String(value || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
 
 function decodeJwtPayload(jwtToken) {
   try {
@@ -265,155 +594,766 @@ function decodeJwtPayload(jwtToken) {
   }
 }
 
-// ── Chart.js Configurations ────────────────────────────
+async function apiFetch(path, options = {}) {
+  const opts = { ...options };
+  opts.headers = opts.headers || {};
+  if (token) {
+    opts.headers.Authorization = `Bearer ${token}`;
+  }
+  const response = await fetch(`${API_ORIGIN}${path}`, opts);
+  if (!response.ok) {
+    let detail = `Request failed (${response.status})`;
+    try {
+      const payload = await response.json();
+      detail = payload.detail || payload.message || detail;
+    } catch {
+      // no-op
+    }
+    throw new Error(detail);
+  }
+  return response.json();
+}
 
-// 1. Sleek Gauge
+function ensureSeries(machineId) {
+  if (!machineSeries.has(machineId)) {
+    machineSeries.set(machineId, {
+      labels: [],
+      rul: [],
+      upper: [],
+      lower: [],
+      lastStep: null,
+    });
+  }
+  return machineSeries.get(machineId);
+}
+
+function appendSeries(machineId, snapshot) {
+  const series = ensureSeries(machineId);
+  const step = Number(snapshot.step ?? 0);
+  const rul = Number(snapshot.RUL ?? 0);
+  const std = Number(snapshot.RUL_std ?? snapshot.rul_std ?? 0);
+
+  if (Number.isFinite(step) && series.lastStep !== null && step === series.lastStep) {
+    return;
+  }
+
+  if (Number.isFinite(step)) {
+    series.lastStep = step;
+  }
+
+  series.labels.push(Number.isFinite(step) ? step : series.labels.length + 1);
+  series.rul.push(rul);
+  series.upper.push(rul + std);
+  series.lower.push(Math.max(0, rul - std));
+
+  if (series.labels.length > 80) {
+    series.labels.shift();
+    series.rul.shift();
+    series.upper.shift();
+    series.lower.shift();
+  }
+}
+
 const gaugeCtx = document.getElementById('rulGauge').getContext('2d');
 const gaugeChart = new Chart(gaugeCtx, {
   type: 'doughnut',
   data: {
     datasets: [{
-      data: [0, 200], 
-      backgroundColor: ['#00e5ff', 'rgba(255,255,255,0.03)'],
+      data: [0, 200],
+      backgroundColor: ['#00e5ff', 'rgba(255,255,255,0.04)'],
       borderWidth: 0,
       circumference: 180,
       rotation: 270,
       cutout: '88%',
-      borderRadius: 4
-    }]
-  },
-  options: { responsive: true, maintainAspectRatio: false, animation: { duration: 800, easing: 'easeOutQuart' }, plugins: { tooltip: { enabled: false } }, events: [] }
-});
-
-// 2. RUL Timeline
-const ctx = document.getElementById('rulChart').getContext('2d');
-const rulData = [], upperData = [], lowerData = [], labels = [];
-const chart = new Chart(ctx, {
-  type: 'line',
-  data: {
-    labels,
-    datasets: [
-      { label: 'RUL', data: rulData, borderColor: '#f8fafc', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.4, order: 1 },
-      { label: 'Upper Bound', data: upperData, borderColor: 'transparent', backgroundColor: 'rgba(0, 229, 255, 0.08)', borderWidth: 0, pointRadius: 0, tension: 0.4, fill: '+1', order: 2 },
-      { label: 'Lower Bound', data: lowerData, borderColor: 'transparent', backgroundColor: 'transparent', borderWidth: 0, pointRadius: 0, tension: 0.4, fill: false, order: 3 },
-    ]
+    }],
   },
   options: {
-    responsive: true, maintainAspectRatio: false, animation: { duration: 0 },
-    plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(10,14,25,0.9)', titleFont: {family: 'Share Tech Mono'}, bodyFont: {family: 'Share Tech Mono'}, borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1 } },
-    scales: {
-      x: { grid: { color:'rgba(255,255,255,0.03)' }, ticks:{ color:'#64748b', font:{family:'Share Tech Mono'} } },
-      y: { grid: { color:'rgba(255,255,255,0.03)' }, ticks:{ color:'#64748b', font:{family:'Share Tech Mono'} } }
-    },
-    interaction: { intersect: false, mode: 'index' }
-  }
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 700, easing: 'easeOutQuart' },
+    plugins: { tooltip: { enabled: false } },
+    events: [],
+  },
 });
 
-// ── Login & Auth ───────────────────────────────────────────
+const chartCtx = document.getElementById('rulChart').getContext('2d');
+const chart = new Chart(chartCtx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      { label: 'RUL', data: [], borderColor: '#f8fafc', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.34, order: 1 },
+      { label: 'Upper', data: [], borderColor: 'transparent', backgroundColor: 'rgba(0,229,255,0.09)', borderWidth: 0, pointRadius: 0, tension: 0.34, fill: '+1', order: 2 },
+      { label: 'Lower', data: [], borderColor: 'transparent', backgroundColor: 'transparent', borderWidth: 0, pointRadius: 0, tension: 0.34, fill: false, order: 3 },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 0 },
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748b', font: { family: 'Share Tech Mono' } } },
+      y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748b', font: { family: 'Share Tech Mono' } } },
+    },
+  },
+});
+
+function applySeriesToChart(machineId) {
+  const series = ensureSeries(machineId);
+  chart.data.labels = [...series.labels];
+  chart.data.datasets[0].data = [...series.rul];
+  chart.data.datasets[1].data = [...series.upper];
+  chart.data.datasets[2].data = [...series.lower];
+  chart.update();
+}
+
+function setList(id, items, emptyText = 'Awaiting updates...') {
+  const el = document.getElementById(id);
+  const arr = Array.isArray(items) ? items : [];
+  if (!arr.length) {
+    el.innerHTML = `<li>${escapeHtml(emptyText)}</li>`;
+    return;
+  }
+  el.innerHTML = arr.map(v => `<li>${escapeHtml(v)}</li>`).join('');
+}
+
+function updateSensor(id, val, maxVal, suffix = '') {
+  const value = Number(val ?? 0);
+  const safe = Number.isFinite(value) ? value : 0;
+  document.getElementById(id).textContent = `${safe.toFixed(2)}${suffix}`;
+  const pct = Math.min(100, Math.max(0, (safe / maxVal) * 100));
+  document.getElementById(`bar-${id}`).style.width = `${pct}%`;
+}
+
+function fleetScore(snapshot) {
+  const alarm = String(snapshot.alarm_level || 'INFO').toUpperCase();
+  const status = String(snapshot.status || 'WAITING').toUpperCase();
+  const alarmMap = { INFO: 1, ADVISORY: 2, ALERT: 3, EMERGENCY: 4 };
+  const statusMap = { WAITING: 0, HEALTHY: 1, WARNING: 2, CRITICAL: 3 };
+  return (alarmMap[alarm] || 0) * 10 + (statusMap[status] || 0);
+}
+
+function renderFleetList() {
+  const fleetList = document.getElementById('fleetList');
+  const rows = Array.from(machineSnapshots.values()).sort((a, b) => fleetScore(b) - fleetScore(a));
+
+  if (!rows.length) {
+    fleetList.innerHTML = '<div class="fleet-meta">No machines streaming yet.</div>';
+    return;
+  }
+
+  fleetList.innerHTML = '';
+  rows.forEach(snapshot => {
+    const machineId = normalizeMachineId(snapshot.machine_id) || 'UNKNOWN';
+    const alarmLevel = String(snapshot.alarm_level || 'INFO').toUpperCase();
+    const status = String(snapshot.status || 'WAITING').toUpperCase();
+    const health = Number(snapshot.health_index ?? 0).toFixed(1);
+    const ttf = Number(snapshot.time_to_failure_hours ?? 0).toFixed(1);
+
+    const item = document.createElement('button');
+    item.className = `fleet-item${machineId === selectedMachine ? ' active' : ''}`;
+    item.onclick = () => selectMachine(machineId);
+    item.innerHTML = `
+      <div class="fleet-row">
+        <div class="fleet-id">${escapeHtml(machineId)}</div>
+        <div class="fault-pill ${escapeHtml(alarmLevel)}">${escapeHtml(alarmLevel)}</div>
+      </div>
+      <div class="fleet-row"><div class="fleet-meta">${escapeHtml(status)}</div><div class="fleet-meta">health ${escapeHtml(health)}</div></div>
+      <div class="fleet-row"><div class="fleet-meta">TTF ${escapeHtml(ttf)}h</div><div class="fleet-meta">${escapeHtml(String(snapshot.maintenance_priority || 'P4'))}</div></div>
+    `;
+    fleetList.appendChild(item);
+  });
+}
+
+function updateFleetCounters() {
+  const rows = Array.from(machineSnapshots.values());
+  const total = rows.length;
+  const alerts = rows.filter(row => {
+    const level = String(row.alarm_level || '').toUpperCase();
+    return level === 'ALERT' || level === 'EMERGENCY';
+  }).length;
+
+  document.getElementById('fleetMachineCount').textContent = String(total);
+  document.getElementById('fleetAlertCount').textContent = String(alerts);
+
+  const pill = document.getElementById('fleetHealthPill');
+  if (alerts > 0) {
+    pill.className = 'fault-pill ALERT';
+    pill.textContent = 'ATTENTION';
+  } else {
+    pill.className = 'fault-pill INFO';
+    pill.textContent = 'STABLE';
+  }
+}
+
+function clearLiveRenderState() {
+  if (selectedRenderTimer) clearTimeout(selectedRenderTimer);
+  if (fleetRenderTimer) clearTimeout(fleetRenderTimer);
+  if (chartRenderTimer) clearTimeout(chartRenderTimer);
+
+  selectedRenderTimer = null;
+  fleetRenderTimer = null;
+  chartRenderTimer = null;
+
+  pendingSelectedSnapshot = null;
+  pendingChartMachineId = null;
+
+  lastSelectedRenderAt = 0;
+  lastFleetRenderAt = 0;
+  lastChartRenderAt = 0;
+}
+
+function scheduleFleetRefresh() {
+  const elapsed = Date.now() - lastFleetRenderAt;
+  if (elapsed >= FLEET_RENDER_INTERVAL_MS) {
+    lastFleetRenderAt = Date.now();
+    renderFleetList();
+    updateFleetCounters();
+    return;
+  }
+
+  if (fleetRenderTimer) return;
+  fleetRenderTimer = setTimeout(() => {
+    fleetRenderTimer = null;
+    lastFleetRenderAt = Date.now();
+    renderFleetList();
+    updateFleetCounters();
+  }, FLEET_RENDER_INTERVAL_MS - elapsed);
+}
+
+function scheduleSelectedMachineRefresh(snapshot) {
+  pendingSelectedSnapshot = snapshot;
+  const elapsed = Date.now() - lastSelectedRenderAt;
+
+  if (elapsed >= SELECTED_RENDER_INTERVAL_MS) {
+    lastSelectedRenderAt = Date.now();
+    const latest = pendingSelectedSnapshot;
+    pendingSelectedSnapshot = null;
+    renderMachine(latest);
+    return;
+  }
+
+  if (selectedRenderTimer) return;
+  selectedRenderTimer = setTimeout(() => {
+    selectedRenderTimer = null;
+    if (!pendingSelectedSnapshot) return;
+    lastSelectedRenderAt = Date.now();
+    const latest = pendingSelectedSnapshot;
+    pendingSelectedSnapshot = null;
+    renderMachine(latest);
+  }, SELECTED_RENDER_INTERVAL_MS - elapsed);
+}
+
+function scheduleChartRefresh(machineId) {
+  if (machineId !== selectedMachine) return;
+  pendingChartMachineId = machineId;
+
+  const elapsed = Date.now() - lastChartRenderAt;
+  if (elapsed >= CHART_RENDER_INTERVAL_MS) {
+    lastChartRenderAt = Date.now();
+    const latestMachineId = pendingChartMachineId;
+    pendingChartMachineId = null;
+    applySeriesToChart(latestMachineId);
+    return;
+  }
+
+  if (chartRenderTimer) return;
+  chartRenderTimer = setTimeout(() => {
+    chartRenderTimer = null;
+    if (!pendingChartMachineId) return;
+    lastChartRenderAt = Date.now();
+    const latestMachineId = pendingChartMachineId;
+    pendingChartMachineId = null;
+    applySeriesToChart(latestMachineId);
+  }, CHART_RENDER_INTERVAL_MS - elapsed);
+}
+
+function renderMachine(snapshot) {
+  if (!snapshot) return;
+
+  const machineId = normalizeMachineId(snapshot.machine_id) || selectedMachine;
+  if (machineId !== selectedMachine) return;
+
+  document.getElementById('selectedMachineLabel').textContent = `// ${machineId}`;
+
+  const rul = Number(snapshot.RUL ?? 0);
+  const std = Number(snapshot.RUL_std ?? snapshot.rul_std ?? 0);
+  const status = String(snapshot.status || 'WAITING').toUpperCase();
+
+  document.getElementById('rul').textContent = rul.toFixed(1);
+  let color = '#00e5ff';
+  if (status === 'WARNING') color = '#ffb700';
+  if (status === 'CRITICAL') color = '#ff3366';
+  document.getElementById('rul').style.textShadow = `0 0 30px ${color}60`;
+
+  const maxGauge = 200;
+  gaugeChart.data.datasets[0].data = [Math.max(0, rul), Math.max(0, maxGauge - rul)];
+  gaugeChart.data.datasets[0].backgroundColor[0] = color;
+  gaugeChart.update();
+
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = status;
+  statusEl.className = `status-badge ${status}`;
+
+  const confPct = Math.max(0, Math.min(100, 100 - (std * 5)));
+  document.getElementById('confPct').textContent = `${confPct.toFixed(0)}%`;
+  document.getElementById('confBar').style.width = `${confPct}%`;
+  document.getElementById('confBar').style.background = confPct > 75 ? 'var(--green)' : confPct > 40 ? 'var(--orange)' : 'var(--red)';
+  document.getElementById('rulRange').innerHTML = `Bounds: <span class="sigma-highlight">${Math.max(0, rul - std).toFixed(1)}</span> to <span class="sigma-highlight">${(rul + std).toFixed(1)}</span>`;
+
+  document.getElementById('sigma').textContent = `±${std.toFixed(2)}`;
+  document.getElementById('stepCount').textContent = String(Number(snapshot.step ?? 0));
+  document.getElementById('ttf').textContent = `${Number(snapshot.time_to_failure_hours ?? 0).toFixed(1)}h`;
+  document.getElementById('failureProb').textContent = `${(Number(snapshot.failure_probability ?? 0) * 100).toFixed(1)}%`;
+  document.getElementById('healthIndex').textContent = Number(snapshot.health_index ?? 0).toFixed(1);
+
+  updateSensor('temp', snapshot.temperature, 400, 'K');
+  updateSensor('air', snapshot.air_temperature, 400, 'K');
+  updateSensor('torque', snapshot.torque, 100);
+  updateSensor('wear', snapshot.tool_wear, 300);
+  updateSensor('speed', snapshot.speed, 3000);
+  updateSensor('voltage', snapshot.voltage, 480);
+  updateSensor('current', snapshot.current, 300);
+  updateSensor('power', snapshot.power_kw, 600);
+  updateSensor('vibration', snapshot.vibration, 16);
+  updateSensor('efficiency', snapshot.efficiency, 100, '%');
+
+  const severity = String(snapshot.fault_severity || 'LOW').toUpperCase();
+  const alarmLevel = String(snapshot.alarm_level || 'INFO').toUpperCase();
+  const severityEl = document.getElementById('faultSeverity');
+  severityEl.textContent = `${severity} / ${alarmLevel}`;
+  severityEl.className = `fault-pill ${alarmLevel}`;
+
+  document.getElementById('faultComponent').textContent = String(snapshot.fault_component || '--').toUpperCase();
+  document.getElementById('faultType').textContent = String(snapshot.fault_type || '--');
+  document.getElementById('faultConfidence').textContent = `${(Number(snapshot.fault_confidence ?? 0) * 100).toFixed(1)}%`;
+  document.getElementById('faultModel').textContent = `${String(snapshot.fault_model_source || 'rules').toUpperCase()} • ${String(snapshot.fault_model_version || 'rules-only')}`;
+  document.getElementById('alarmSummary').textContent = `${alarmLevel} • ${String(snapshot.maintenance_priority || 'P4')} • ${Number(snapshot.recommended_window_hours ?? 0).toFixed(1)}h`;
+
+  setList('faultCauses', snapshot.probable_causes, 'Awaiting diagnosis causes...');
+  setList('faultActions', snapshot.recommended_actions, 'Awaiting recommended actions...');
+  setList('alarmReasons', snapshot.alarm_reasons, 'No alarm reasons available.');
+
+  latestPredictionId = snapshot.id || latestPredictionId;
+  document.getElementById('predictedComponent').textContent = String(snapshot.fault_component || '--').toUpperCase();
+  document.getElementById('relabelPredictionId').textContent = latestPredictionId ? `#${latestPredictionId}` : '--';
+}
+
+function upsertSnapshot(snapshot, fromStream = true) {
+  const machineId = normalizeMachineId(snapshot.machine_id) || 'M1';
+  const enriched = { ...snapshot, machine_id: machineId };
+
+  machineSnapshots.set(machineId, enriched);
+  if (fromStream || !machineSeries.has(machineId)) {
+    appendSeries(machineId, enriched);
+  }
+
+  if (!machineSnapshots.has(selectedMachine)) {
+    selectedMachine = machineId;
+  }
+
+  if (suppressDashboardRender) return;
+
+  if (fromStream) {
+    scheduleFleetRefresh();
+    if (machineId === selectedMachine) {
+      scheduleSelectedMachineRefresh(enriched);
+      scheduleChartRefresh(machineId);
+    }
+    return;
+  }
+
+  renderFleetList();
+  updateFleetCounters();
+  if (machineId === selectedMachine) {
+    renderMachine(enriched);
+    applySeriesToChart(machineId);
+  }
+}
+
+async function loadMachineHistory(machineId) {
+  try {
+    const rows = await apiFetch(`/diagnosis/recent/${encodeURIComponent(machineId)}?limit=80`);
+    const ordered = Array.isArray(rows) ? [...rows].reverse() : [];
+    const series = ensureSeries(machineId);
+    series.labels = [];
+    series.rul = [];
+    series.upper = [];
+    series.lower = [];
+    series.lastStep = null;
+    ordered.forEach(item => appendSeries(machineId, item));
+
+    if (machineId === selectedMachine) {
+      applySeriesToChart(machineId);
+      if (ordered.length) {
+        const latest = ordered[ordered.length - 1];
+        machineSnapshots.set(machineId, latest);
+        renderMachine(latest);
+      }
+    }
+  } catch {
+    // no-op
+  }
+}
+
+function selectMachine(machineId) {
+  clearLiveRenderState();
+  selectedMachine = normalizeMachineId(machineId) || selectedMachine;
+  document.getElementById('selectedMachineLabel').textContent = `// ${selectedMachine}`;
+  renderFleetList();
+
+  if (machineSnapshots.has(selectedMachine)) {
+    renderMachine(machineSnapshots.get(selectedMachine));
+  }
+  loadMachineHistory(selectedMachine);
+}
+
+async function fetchFleetOverview() {
+  try {
+    const payload = await apiFetch('/fleet/overview?limit=200');
+    const rows = Array.isArray(payload.machines) ? payload.machines : [];
+
+    suppressDashboardRender = true;
+    try {
+      rows.forEach(row => upsertSnapshot(row, false));
+    } finally {
+      suppressDashboardRender = false;
+    }
+
+    if (!rows.length) {
+      renderFleetList();
+      updateFleetCounters();
+      return;
+    }
+
+    renderFleetList();
+    updateFleetCounters();
+    if (machineSnapshots.has(selectedMachine)) {
+      renderMachine(machineSnapshots.get(selectedMachine));
+      applySeriesToChart(selectedMachine);
+    }
+  } catch (err) {
+    document.getElementById('connLabel').textContent = err.message;
+  }
+}
+
+function renderFeedbackQueue(items) {
+  const list = document.getElementById('feedbackQueue');
+  const rows = Array.isArray(items) ? items : [];
+  if (!rows.length) {
+    list.innerHTML = '<li>No pending feedback.</li>';
+    return;
+  }
+
+  list.innerHTML = rows.map(item => {
+    const id = Number(item.id || 0);
+    const resolveButton = userRole === 'admin'
+      ? `<button class="action-btn subtle" onclick="resolveFeedback(${id})">Resolve</button>`
+      : '';
+    return `
+      <li>
+        <div><strong>${escapeHtml(item.machine_id)} #${escapeHtml(id)}</strong></div>
+        <div>${escapeHtml(item.predicted_component || '--')} -> ${escapeHtml(item.corrected_component || '--')}</div>
+        <div style="color:var(--muted);">${escapeHtml(item.notes || 'no notes')}</div>
+        ${resolveButton}
+      </li>
+    `;
+  }).join('');
+}
+
+async function fetchFeedbackQueue() {
+  try {
+    const payload = await apiFetch('/feedback/relabels?resolved=false&limit=20');
+    renderFeedbackQueue(payload.items || []);
+  } catch (err) {
+    document.getElementById('feedbackQueue').innerHTML = `<li>${escapeHtml(err.message)}</li>`;
+  }
+}
+
+async function submitRelabel() {
+  const corrected = document.getElementById('correctedComponent').value;
+  const notes = document.getElementById('relabelNotes').value || '';
+  const resolved = !!document.getElementById('relabelResolved').checked;
+  const msg = document.getElementById('relabelMessage');
+  msg.style.color = 'var(--muted)';
+  msg.textContent = '';
+
+  if (!selectedMachine) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Select a machine first.';
+    return;
+  }
+
+  const payload = {
+    machine_id: selectedMachine,
+    corrected_component: corrected,
+    notes,
+    resolved,
+  };
+  if (latestPredictionId) {
+    payload.prediction_id = Number(latestPredictionId);
+  }
+
+  try {
+    await apiFetch('/feedback/relabel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    msg.style.color = 'var(--green)';
+    msg.textContent = 'Relabel submitted.';
+    document.getElementById('relabelNotes').value = '';
+    document.getElementById('relabelResolved').checked = false;
+    await fetchFeedbackQueue();
+    await fetchRetrainingStatus();
+  } catch (err) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = err.message;
+  }
+}
+
+async function resolveFeedback(feedbackId) {
+  if (userRole !== 'admin') return;
+  try {
+    await apiFetch(`/feedback/relabels/${feedbackId}/resolve`, { method: 'POST' });
+    await fetchFeedbackQueue();
+    await fetchRetrainingStatus();
+  } catch (err) {
+    const msg = document.getElementById('relabelMessage');
+    msg.style.color = 'var(--red)';
+    msg.textContent = err.message;
+  }
+}
+
+function renderRetrainingStatus(payload) {
+  const status = payload?.status || {};
+  const drift = status.last_drift || {};
+  const latestRun = status.latest_run || null;
+
+  document.getElementById('driftScore').textContent = Number(drift.score ?? 0).toFixed(3);
+  document.getElementById('driftState').textContent = drift.detected ? 'detected' : 'normal';
+  document.getElementById('driftRows').textContent = String(drift.rows_evaluated ?? 0);
+  document.getElementById('retrainDecision').textContent = String(status.last_decision || '--');
+  document.getElementById('retrainPendingFeedback').textContent = String(status.pending_feedback ?? 0);
+  document.getElementById('retrainReadyFeedback').textContent = String(status.resolved_feedback_ready ?? 0);
+
+  const pill = document.getElementById('retrainStatePill');
+  if (status.running) {
+    pill.className = 'fault-pill ALERT';
+    pill.textContent = 'RUNNING';
+  } else if (status.last_decision === 'trained') {
+    pill.className = 'fault-pill INFO';
+    pill.textContent = 'TRAINED';
+  } else if (drift.detected) {
+    pill.className = 'fault-pill ADVISORY';
+    pill.textContent = 'DRIFT';
+  } else {
+    pill.className = 'fault-pill INFO';
+    pill.textContent = 'IDLE';
+  }
+
+  const driftRows = Array.isArray(drift.top_shifted_features) ? drift.top_shifted_features : [];
+  if (!driftRows.length) {
+    document.getElementById('driftFeatures').innerHTML = '<li>No significant feature shift.</li>';
+  } else {
+    document.getElementById('driftFeatures').innerHTML = driftRows
+      .map(item => `<li>${escapeHtml(item.feature)} : ${Number(item.score ?? 0).toFixed(3)}</li>`)
+      .join('');
+  }
+
+  if (!latestRun) {
+    document.getElementById('retrainLastRun').innerHTML = '<li>No retraining run yet.</li>';
+  } else {
+    const lines = [
+      `Run #${latestRun.id} ${latestRun.status || 'unknown'}`,
+      `Trigger ${latestRun.trigger_type || '--'}`,
+      `Model ${latestRun.model_version || '--'}`,
+      `Rows ${latestRun.dataset_rows || 0} | feedback ${latestRun.feedback_samples || 0}`,
+      `${latestRun.started_at || ''}`,
+    ];
+    document.getElementById('retrainLastRun').innerHTML = lines.map(line => `<li>${escapeHtml(line)}</li>`).join('');
+  }
+}
+
+async function fetchRetrainingStatus() {
+  try {
+    const payload = await apiFetch('/retraining/status');
+    renderRetrainingStatus(payload);
+  } catch (err) {
+    const msg = document.getElementById('retrainMessage');
+    msg.style.color = 'var(--red)';
+    msg.textContent = err.message;
+  }
+}
+
+async function triggerRetrain() {
+  const msg = document.getElementById('retrainMessage');
+  msg.style.color = 'var(--muted)';
+  msg.textContent = '';
+
+  if (userRole !== 'admin') {
+    msg.style.color = 'var(--orange)';
+    msg.textContent = 'Admin role required.';
+    return;
+  }
+
+  const reason = document.getElementById('retrainReason').value || 'manual retraining';
+  try {
+    await apiFetch('/retraining/run-now', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    msg.style.color = 'var(--green)';
+    msg.textContent = 'Retraining queued.';
+    await fetchRetrainingStatus();
+  } catch (err) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = err.message;
+  }
+}
+
+async function bootstrapDashboard() {
+  await fetchFleetOverview();
+  await fetchRetrainingStatus();
+  await fetchFeedbackQueue();
+
+  if (!machineSnapshots.has(selectedMachine)) {
+    const firstMachine = Array.from(machineSnapshots.keys())[0];
+    if (firstMachine) {
+      selectedMachine = firstMachine;
+    }
+  }
+  selectMachine(selectedMachine);
+
+  if (fleetPollInterval) clearInterval(fleetPollInterval);
+  if (retrainPollInterval) clearInterval(retrainPollInterval);
+  if (feedbackPollInterval) clearInterval(feedbackPollInterval);
+
+  fleetPollInterval = setInterval(fetchFleetOverview, 15000);
+  retrainPollInterval = setInterval(fetchRetrainingStatus, 20000);
+  feedbackPollInterval = setInterval(fetchFeedbackQueue, 20000);
+}
+
 async function login() {
-  const username = document.getElementById('username').value.trim();
+  username = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value;
   const errEl = document.getElementById('login-error');
   errEl.textContent = '';
-  if (!username || !password) { errEl.textContent = 'Credentials required.'; return; }
+
+  if (!username || !password) {
+    errEl.textContent = 'Credentials required.';
+    return;
+  }
+
   try {
-    const res = await fetch(`${API_ORIGIN}/auth/login`, {
-      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ username, password })
+    const response = await fetch(`${API_ORIGIN}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username, password }),
     });
-    if (!res.ok) { const e = await res.json(); errEl.textContent = e.detail || 'Authentication failed.'; return; }
-    const data = await res.json();
+
+    if (!response.ok) {
+      const payload = await response.json();
+      errEl.textContent = payload.detail || 'Authentication failed.';
+      return;
+    }
+
+    const data = await response.json();
     token = data.access_token;
-    const payload = decodeJwtPayload(token);
-    userRole = payload.role || 'operator';
-    
+    const jwtPayload = decodeJwtPayload(token);
+    userRole = jwtPayload.role || 'operator';
+
     document.getElementById('login-overlay').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
     document.getElementById('userBadge').textContent = `${username} • ${userRole.toUpperCase()}`;
-    
+    document.getElementById('feedbackRolePill').textContent = userRole.toUpperCase();
+    document.getElementById('relabelResolvedWrap').style.display = userRole === 'admin' ? 'flex' : 'none';
+    document.getElementById('retrainBtn').disabled = userRole !== 'admin';
+
+    await bootstrapDashboard();
     connectWS();
-  } catch (e) { errEl.textContent = 'Server connection lost.'; }
+  } catch {
+    errEl.textContent = 'Server connection lost.';
+  }
 }
-document.getElementById('password').addEventListener('keydown', e => { if (e.key==='Enter') login(); });
+
+document.getElementById('password').addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    login();
+  }
+});
 
 function logout() {
-  token=null; userRole=null;
+  token = null;
+  userRole = null;
+  username = null;
+
   if (ws) ws.close();
-  document.getElementById('dashboard').style.display='none';
-  document.getElementById('login-overlay').style.display='flex';
-  document.getElementById('password').value='';
+  ws = null;
+
+  if (wsHeartbeat) clearInterval(wsHeartbeat);
+  if (fleetPollInterval) clearInterval(fleetPollInterval);
+  if (retrainPollInterval) clearInterval(retrainPollInterval);
+  if (feedbackPollInterval) clearInterval(feedbackPollInterval);
+
+  wsHeartbeat = null;
+  fleetPollInterval = null;
+  retrainPollInterval = null;
+  feedbackPollInterval = null;
+
+  clearLiveRenderState();
+
+  selectedMachine = 'M1';
+  latestPredictionId = null;
+  machineSnapshots.clear();
+  machineSeries.clear();
+
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('password').value = '';
   document.getElementById('connDot').className = 'conn-dot';
-  document.getElementById('connLabel').textContent='OFFLINE';
+  document.getElementById('connLabel').textContent = 'OFFLINE';
 }
 
-// ── WebSocket Logic ────────────────────────────────────────
 function connectWS() {
   ws = new WebSocket(`${WS_ORIGIN}/ws?token=${encodeURIComponent(token)}`);
+
   ws.onopen = () => {
     document.getElementById('connDot').className = 'conn-dot live';
     document.getElementById('connLabel').textContent = 'STREAMING';
+
+    if (wsHeartbeat) clearInterval(wsHeartbeat);
+    wsHeartbeat = setInterval(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send('ping');
+      }
+    }, 15000);
   };
-  ws.onclose = e => {
+
+  ws.onclose = event => {
     document.getElementById('connDot').className = 'conn-dot';
-    if (e.code===1008) { document.getElementById('connLabel').textContent='AUTH ERROR'; logout(); }
-    else { document.getElementById('connLabel').textContent='RECONNECTING...'; if(token) setTimeout(connectWS,3000); }
+    if (wsHeartbeat) clearInterval(wsHeartbeat);
+    wsHeartbeat = null;
+
+    if (event.code === 1008) {
+      document.getElementById('connLabel').textContent = 'AUTH ERROR';
+      logout();
+    } else {
+      document.getElementById('connLabel').textContent = 'RECONNECTING...';
+      if (token) setTimeout(connectWS, 3000);
+    }
   };
 
   ws.onmessage = event => {
-    const d = JSON.parse(event.data);
-    const rul    = d.RUL;
-    const std    = d.RUL_std ?? (d.rul_std ?? 0); // Handle both key variations
-    const status = d.status;
-
-    // 1. Update Gauge & Text
-    document.getElementById('rul').textContent = rul.toFixed(1);
-    let color = '#00e5ff'; // Default Healthy
-    if (status === 'WARNING') color = '#ffb700';
-    if (status === 'CRITICAL') color = '#ff3366';
-    
-    document.getElementById('rul').style.textShadow = `0 0 30px ${color}60`;
-    
-    const maxGauge = 200; 
-    gaugeChart.data.datasets[0].data = [rul, Math.max(0, maxGauge - rul)];
-    gaugeChart.data.datasets[0].backgroundColor[0] = color;
-    gaugeChart.update();
-
-    // 2. Status Badge
-    const statusEl = document.getElementById('status');
-    statusEl.textContent = status;
-    statusEl.className = `status-badge ${status}`;
-
-    // 3. Confidence & Stats
-    // Assuming higher standard deviation = lower confidence. 
-    // You can adjust the multiplier (e.g., std * 5) to tune the visual strictness.
-    const confPct = Math.max(0, Math.min(100, 100 - (std * 5))); 
-    document.getElementById('confPct').textContent = confPct.toFixed(0) + '%';
-    document.getElementById('confBar').style.width = confPct + '%';
-    document.getElementById('confBar').style.background = confPct > 75 ? 'var(--green)' : confPct > 40 ? 'var(--orange)' : 'var(--red)';
-    
-    document.getElementById('rulRange').innerHTML = `Bounds: <span class="sigma-highlight">${Math.max(0, rul - std).toFixed(1)}</span> to <span class="sigma-highlight">${(rul + std).toFixed(1)}</span>`;
-    document.getElementById('sigma').textContent = `±${std.toFixed(2)}`;
-    document.getElementById('stepCount').textContent = ++stepCount;
-
-    // 4. Update Chart
-    labels.push(d.step);
-    rulData.push(rul);
-    upperData.push(rul + std);
-    lowerData.push(Math.max(0, rul - std));
-    if (labels.length > 50) { labels.shift(); rulData.shift(); upperData.shift(); lowerData.shift(); }
-    chart.update();
-
-    // 5. Update Sensors
-    const updateSensor = (id, val, maxVal) => {
-        document.getElementById(id).textContent = val.toFixed(2);
-        const pct = Math.min(100, Math.max(0, (val / maxVal) * 100));
-        document.getElementById(`bar-${id}`).style.width = `${pct}%`;
-    };
-    
-    updateSensor('temp', d.temperature ?? 0, 400);
-    updateSensor('air', d.air_temperature ?? 0, 400);
-    updateSensor('torque', d.torque ?? 0, 100);
-    updateSensor('wear', d.tool_wear ?? 0, 300);
+    try {
+      const payload = JSON.parse(event.data);
+      if (!payload || !payload.machine_id) return;
+      upsertSnapshot(payload, true);
+    } catch {
+      // ignore malformed frame
+    }
   };
 }
 </script>

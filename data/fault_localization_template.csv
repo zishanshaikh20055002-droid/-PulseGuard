@@ -1,0 +1,4 @@
+machine_id,RUL,RUL_std,status,temperature,air_temperature,torque,tool_wear,speed,voltage,current,power_kw,vibration,efficiency,health_index,failure_probability,time_to_failure_hours,fault_component,fault_confidence,fault_severity
+M1,98.2,0.42,HEALTHY,312.5,298.1,47.2,41.0,2150.0,401.2,24.1,13.8,3.1,91.5,84.0,0.16,3.27,stator,0.82,LOW
+M1,61.4,0.73,WARNING,333.8,302.0,68.4,152.0,2480.0,418.7,39.6,27.2,6.7,84.1,48.6,0.64,2.05,bearing,0.79,WARNING
+M2,37.9,1.10,CRITICAL,347.4,304.1,83.9,236.0,2720.0,432.9,52.7,39.4,9.8,77.3,23.7,0.91,1.26,rotor,0.88,CRITICAL

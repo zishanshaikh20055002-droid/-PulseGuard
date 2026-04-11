@@ -109,3 +109,24 @@ class PredictionResponse(BaseModel):
     torque:          float
     tool_wear:       float
     speed:           float
+    voltage:         float
+    current:         float
+    power_kw:        float
+    vibration:       float
+    efficiency:      float
+    health_index:    float
+    failure_probability: float
+    time_to_failure_hours: float
+    fault_component: str
+    fault_type:      str
+    fault_severity:  str
+    fault_confidence: float
+    probable_causes: list[str]
+    recommended_actions: list[str]
+    fault_model_source: str
+    fault_model_version: str
+    fault_component_probabilities: dict[str, float]
+    alarm_level: str
+    maintenance_priority: str
+    alarm_reasons: list[str]
+    recommended_window_hours: float

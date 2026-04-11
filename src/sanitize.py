@@ -34,6 +34,13 @@ def sanitize_machine_id(machine_id: str) -> str:
     return cleaned.upper()
 
 
+def sanitize_component_label(label: str) -> str:
+    """Normalize human/ML component labels into stable lowercase tokens."""
+    cleaned = re.sub(r"[^A-Za-z0-9_\-]+", "_", str(label).strip().lower())
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned[:48]
+
+
 def sanitize_mode(mode: str) -> str:
     """
     Normalise mode string. Rejects anything not in the allowed set.
@@ -49,6 +56,28 @@ def sanitize_mode(mode: str) -> str:
 def clamp(value: float, lo: float, hi: float) -> float:
     """Clamp a numeric value to [lo, hi]. Silently fixes out-of-range values."""
     return max(lo, min(hi, value))
+
+
+def _sanitize_str_list(values, max_items: int = 8, max_item_len: int = 160) -> list[str]:
+    if not isinstance(values, (list, tuple)):
+        return []
+    out = []
+    for value in list(values)[:max_items]:
+        out.append(sanitize_string(str(value), max_length=max_item_len))
+    return out
+
+
+def _sanitize_float_dict(values, max_items: int = 16) -> dict[str, float]:
+    if not isinstance(values, dict):
+        return {}
+    out = {}
+    for idx, (key, value) in enumerate(values.items()):
+        if idx >= max_items:
+            break
+        if not isinstance(value, (int, float)):
+            continue
+        out[sanitize_string(str(key), max_length=48)] = round(clamp(float(value), 0.0, 1.0), 4)
+    return out
 
 
 def sanitize_sensor_dict(data: dict) -> dict:
@@ -83,4 +112,36 @@ def sanitize_sensor_dict(data: dict) -> dict:
         "torque":          clamp(data.get("torque", 0.0),          0.0,   100.0),
         "tool_wear":       clamp(data.get("tool_wear", 0.0),       0.0,   300.0),
         "speed":           clamp(data.get("speed", 0.0),           0.0,   3000.0),
+        "voltage":         clamp(data.get("voltage", 0.0),         0.0,   1000.0),
+        "current":         clamp(data.get("current", 0.0),         0.0,   2000.0),
+        "power_kw":        clamp(data.get("power_kw", 0.0),        0.0,   5000.0),
+        "vibration":       clamp(data.get("vibration", 0.0),       0.0,   200.0),
+        "efficiency":      clamp(data.get("efficiency", 0.0),      0.0,   100.0),
+        "health_index":    clamp(data.get("health_index", 0.0),    0.0,   100.0),
+        "failure_probability": clamp(data.get("failure_probability", 0.0), 0.0, 1.0),
+        "time_to_failure_hours": clamp(data.get("time_to_failure_hours", 0.0), 0.0, 100_000.0),
+        "fault_component": sanitize_string(str(data.get("fault_component", "unknown")), max_length=48),
+        "fault_type":      sanitize_string(str(data.get("fault_type", "unknown")), max_length=96),
+        "fault_severity":  sanitize_string(str(data.get("fault_severity", "LOW")), max_length=16),
+        "fault_confidence": clamp(data.get("fault_confidence", 0.0), 0.0, 1.0),
+        "probable_causes": _sanitize_str_list(data.get("probable_causes", []), max_items=8, max_item_len=200),
+        "recommended_actions": _sanitize_str_list(data.get("recommended_actions", []), max_items=8, max_item_len=220),
+        "component_scores": {
+            sanitize_string(str(k), max_length=48): round(clamp(float(v), 0.0, 1.0), 4)
+            for k, v in (data.get("component_scores", {}) or {}).items()
+            if isinstance(v, (int, float))
+        },
+        "component_health": {
+            sanitize_string(str(k), max_length=48): round(clamp(float(v), 0.0, 100.0), 2)
+            for k, v in (data.get("component_health", {}) or {}).items()
+            if isinstance(v, (int, float))
+        },
+        "diagnosis_version": sanitize_string(str(data.get("diagnosis_version", "v1")), max_length=48),
+        "fault_model_source": sanitize_string(str(data.get("fault_model_source", "rules")), max_length=24),
+        "fault_model_version": sanitize_string(str(data.get("fault_model_version", "rules-only")), max_length=64),
+        "fault_component_probabilities": _sanitize_float_dict(data.get("fault_component_probabilities", {}), max_items=16),
+        "alarm_level": sanitize_string(str(data.get("alarm_level", "INFO")), max_length=16),
+        "maintenance_priority": sanitize_string(str(data.get("maintenance_priority", "P4")), max_length=8),
+        "alarm_reasons": _sanitize_str_list(data.get("alarm_reasons", []), max_items=8, max_item_len=200),
+        "recommended_window_hours": clamp(data.get("recommended_window_hours", 72.0), 0.0, 10000.0),
     }

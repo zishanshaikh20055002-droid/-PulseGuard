@@ -12,6 +12,7 @@ from datetime import timedelta
 from fastapi import FastAPI, WebSocket, Depends, HTTPException, Request, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel, Field
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -26,15 +27,33 @@ from src.auth import (
 )
 from src.database import init_db
 from src.limiter import limiter
-from src.sanitize import sanitize_mode
+from src.sanitize import sanitize_mode, sanitize_machine_id, sanitize_string, sanitize_component_label
 from src.metrics import (
     rul_gauge, rul_std_gauge, health_status_counter, inference_latency,
     ws_active_connections,
     simulation_mode_info,
     sensor_temperature, sensor_torque, sensor_tool_wear, sensor_speed,
+    sensor_voltage, sensor_current, sensor_power_kw, sensor_vibration,
+    machine_health_index, failure_probability, time_to_failure_hours,
+    fault_component_counter, alarm_events,
+    drift_score_gauge, drift_detected_flag, drift_rows_gauge,
+    auto_retrain_runs, feedback_relabels_total, feedback_pending_gauge, feedback_ready_gauge,
 )
 from src.ws_manager import manager
 from src.mqtt_subscriber import start_subscriber
+from src.database import (
+    fetch_latest_diagnosis,
+    fetch_recent_diagnosis,
+    fetch_fleet_overview,
+    fetch_machine_ids,
+    fetch_prediction_by_id,
+    fetch_latest_prediction,
+    insert_feedback_label,
+    fetch_feedback_labels,
+    resolve_feedback_label,
+)
+from src.fault_localization import FaultLocalizer
+from src.retraining import AutoRetrainCoordinator
 
 # ── Define BASE_DIR ───────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -53,6 +72,7 @@ input_details  = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
 scaler = joblib.load(SCALER_PATH)
+fault_localizer = FaultLocalizer()
 
 # ── Metrics bundle ────────────────────────────────────────────
 metrics = {
@@ -64,7 +84,37 @@ metrics = {
     "sensor_torque":         sensor_torque,
     "sensor_tool_wear":      sensor_tool_wear,
     "sensor_speed":          sensor_speed,
+    "sensor_voltage":        sensor_voltage,
+    "sensor_current":        sensor_current,
+    "sensor_power_kw":       sensor_power_kw,
+    "sensor_vibration":      sensor_vibration,
+    "machine_health_index":  machine_health_index,
+    "failure_probability":   failure_probability,
+    "time_to_failure_hours": time_to_failure_hours,
+    "fault_component_counter": fault_component_counter,
+    "alarm_events":          alarm_events,
+    "drift_score_gauge":     drift_score_gauge,
+    "drift_detected_flag":   drift_detected_flag,
+    "drift_rows_gauge":      drift_rows_gauge,
+    "auto_retrain_runs":     auto_retrain_runs,
+    "feedback_relabels_total": feedback_relabels_total,
+    "feedback_pending_gauge":  feedback_pending_gauge,
+    "feedback_ready_gauge":    feedback_ready_gauge,
 }
+
+retrain_coordinator = AutoRetrainCoordinator(fault_localizer=fault_localizer, metrics=metrics)
+
+
+class FeedbackRelabelRequest(BaseModel):
+    machine_id: str = Field(min_length=1, max_length=32)
+    corrected_component: str = Field(min_length=1, max_length=64)
+    prediction_id: int | None = Field(default=None, ge=1)
+    notes: str = Field(default="", max_length=400)
+    resolved: bool = False
+
+
+class ManualRetrainRequest(BaseModel):
+    reason: str = Field(default="manual retraining", max_length=180)
 
 # ── App ───────────────────────────────────────────────────────
 app = FastAPI(
@@ -98,11 +148,17 @@ async def startup():
 
     thread = threading.Thread(
         target=start_subscriber,
-        args=(interpreter, input_details, output_details, scaler, manager, metrics),
+        args=(interpreter, input_details, output_details, scaler, manager, metrics, fault_localizer),
         daemon=True,
         name="mqtt-subscriber",
     )
     thread.start()
+    retrain_coordinator.start()
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    retrain_coordinator.stop()
 
 # ── Auth ──────────────────────────────────────────────────────
 @app.post("/auth/login", response_model=Token, tags=["Auth"])
@@ -138,6 +194,203 @@ def home(request: Request):
 @app.get("/health", tags=["General"])
 def health():
     return {"status": "ok"}
+
+
+@app.get("/diagnosis/latest/{machine_id}", tags=["Diagnosis"])
+@limiter.limit("120/minute")
+def diagnosis_latest(machine_id: str, request: Request):
+    cleaned_id = sanitize_machine_id(machine_id)
+    if not cleaned_id:
+        raise HTTPException(status_code=400, detail="Invalid machine_id")
+
+    row = fetch_latest_diagnosis(cleaned_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"No diagnosis data found for {cleaned_id}")
+    return row
+
+
+@app.get("/diagnosis/recent/{machine_id}", tags=["Diagnosis"])
+@limiter.limit("60/minute")
+def diagnosis_recent(machine_id: str, request: Request, limit: int = 100):
+    cleaned_id = sanitize_machine_id(machine_id)
+    if not cleaned_id:
+        raise HTTPException(status_code=400, detail="Invalid machine_id")
+    return fetch_recent_diagnosis(cleaned_id, limit=limit)
+
+
+@app.get("/fleet/overview", tags=["Fleet"])
+@limiter.limit("120/minute")
+def fleet_overview(
+    request: Request,
+    limit: int = 100,
+    current_user: User = Depends(get_current_user),
+):
+    data = fetch_fleet_overview(limit=limit)
+    return {
+        "requested_by": current_user.username,
+        "count": len(data),
+        "machines": data,
+    }
+
+
+@app.get("/fleet/machines", tags=["Fleet"])
+@limiter.limit("120/minute")
+def fleet_machines(request: Request, current_user: User = Depends(get_current_user)):
+    data = fetch_machine_ids()
+    return {
+        "requested_by": current_user.username,
+        "count": len(data),
+        "machine_ids": data,
+    }
+
+
+@app.post("/feedback/relabel", tags=["Feedback"])
+@limiter.limit("90/minute")
+def feedback_relabel(
+    payload: FeedbackRelabelRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
+    machine_id = sanitize_machine_id(payload.machine_id)
+    if not machine_id:
+        raise HTTPException(status_code=400, detail="Invalid machine_id")
+
+    corrected_component = sanitize_component_label(payload.corrected_component)
+    if not corrected_component:
+        raise HTTPException(status_code=400, detail="Invalid corrected_component")
+
+    notes = sanitize_string(payload.notes, max_length=400) if payload.notes else ""
+    prediction_id = int(payload.prediction_id) if payload.prediction_id else None
+    prediction = None
+
+    if prediction_id is not None:
+        prediction = fetch_prediction_by_id(prediction_id)
+        if not prediction:
+            raise HTTPException(status_code=404, detail=f"Prediction {prediction_id} not found")
+        if prediction.get("machine_id") and sanitize_machine_id(str(prediction.get("machine_id"))) != machine_id:
+            raise HTTPException(
+                status_code=400,
+                detail="prediction_id does not belong to provided machine_id",
+            )
+    else:
+        prediction = fetch_latest_prediction(machine_id)
+
+    if not prediction:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No diagnosis record found for machine {machine_id}",
+        )
+
+    if payload.resolved and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can mark relabels as resolved")
+
+    created = insert_feedback_label(
+        machine_id=machine_id,
+        corrected_component=corrected_component,
+        reviewer=current_user.username,
+        notes=notes,
+        prediction_id=int(prediction.get("id")) if prediction and prediction.get("id") else prediction_id,
+        predicted_component=str(prediction.get("fault_component", "unknown")) if prediction else "unknown",
+        metadata={
+            "submitted_by_role": current_user.role,
+            "source": "dashboard_or_api",
+        },
+        resolved=bool(payload.resolved and current_user.role == "admin"),
+    )
+
+    metrics["feedback_relabels_total"].labels(
+        component=corrected_component,
+        resolved="1" if created.get("resolved") else "0",
+    ).inc()
+
+    return {
+        "message": "feedback relabel recorded",
+        "feedback": created,
+    }
+
+
+@app.get("/feedback/relabels", tags=["Feedback"])
+@limiter.limit("120/minute")
+def feedback_list(
+    request: Request,
+    limit: int = 100,
+    machine_id: str | None = None,
+    resolved: bool | None = None,
+    current_user: User = Depends(get_current_user),
+):
+    cleaned_machine_id = sanitize_machine_id(machine_id) if machine_id else None
+    items = fetch_feedback_labels(limit=limit, machine_id=cleaned_machine_id, resolved=resolved)
+    return {
+        "requested_by": current_user.username,
+        "count": len(items),
+        "items": items,
+    }
+
+
+@app.post("/feedback/relabels/{feedback_id}/resolve", tags=["Feedback"])
+@limiter.limit("60/minute")
+def feedback_resolve(
+    feedback_id: int,
+    request: Request,
+    current_user: User = Depends(require_admin),
+):
+    row = resolve_feedback_label(feedback_id=feedback_id, resolved_by=current_user.username)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Feedback {feedback_id} not found")
+
+    metrics["feedback_relabels_total"].labels(
+        component=sanitize_component_label(str(row.get("corrected_component", "unknown"))),
+        resolved="1",
+    ).inc()
+
+    return {
+        "message": "feedback resolved",
+        "feedback": row,
+    }
+
+
+@app.get("/retraining/status", tags=["Retraining"])
+@limiter.limit("120/minute")
+def retraining_status(request: Request, current_user: User = Depends(get_current_user)):
+    return {
+        "requested_by": current_user.username,
+        "status": retrain_coordinator.status(),
+    }
+
+
+@app.post("/retraining/run-now", tags=["Retraining"])
+@limiter.limit("20/minute")
+def retraining_run_now(
+    payload: ManualRetrainRequest,
+    request: Request,
+    current_user: User = Depends(require_admin),
+):
+    status = retrain_coordinator.trigger_manual(
+        requested_by=current_user.username,
+        reason=sanitize_string(payload.reason, max_length=180),
+    )
+    return {
+        "message": "manual retraining queued",
+        "requested_by": current_user.username,
+        "status": status,
+    }
+
+
+@app.get("/diagnosis/model/fault-localizer", tags=["Diagnosis"])
+@limiter.limit("60/minute")
+def fault_localizer_info(request: Request):
+    return fault_localizer.info()
+
+
+@app.post("/diagnosis/model/fault-localizer/reload", tags=["Diagnosis"])
+@limiter.limit("20/minute")
+def fault_localizer_reload(request: Request, current_user: User = Depends(require_admin)):
+    fault_localizer.reload()
+    return {
+        "message": "fault localizer reloaded",
+        "requested_by": current_user.username,
+        "info": fault_localizer.info(),
+    }
 
 # ── Mode control ──────────────────────────────────────────────
 @app.post("/set_mode/{new_mode}", tags=["Control"])

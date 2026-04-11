@@ -3,11 +3,15 @@ import logging
 import os
 import time
 import warnings
+from datetime import datetime
+from collections import defaultdict
 
 import numpy as np
 import paho.mqtt.client as mqtt
 
-from src.ingestion import HardwareAgnosticBuffer
+from src.ingestion import HardwareAgnosticBuffer, AsyncSensorFusionBuffer
+from src.diagnostics import build_realtime_diagnosis, FAULT_PLAYBOOK
+from src.alarm_policy import evaluate_alarm
 
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -35,7 +39,26 @@ WINDOW_SIZE = 30
 NUM_FEATURES = 14  # CMAPSS uses 14
 N_PASSES    = max(1, _env_int("MC_PASSES", 30))
 NOISE_STD   = max(0.0, _env_float("MC_NOISE_STD", 0.01))
+ASYNC_RESAMPLE_HZ = max(0.1, _env_float("ASYNC_RESAMPLE_HZ", 1.0))
+ASYNC_MAX_BUFFER_SECONDS = max(10.0, _env_float("ASYNC_MAX_BUFFER_SECONDS", 120.0))
 RNG         = np.random.default_rng()
+
+CMAPSS_FEATURE_NAMES = [
+    "sensor_measurement_2",
+    "sensor_measurement_3",
+    "sensor_measurement_4",
+    "sensor_measurement_7",
+    "sensor_measurement_8",
+    "sensor_measurement_9",
+    "sensor_measurement_11",
+    "sensor_measurement_12",
+    "sensor_measurement_13",
+    "sensor_measurement_14",
+    "sensor_measurement_15",
+    "sensor_measurement_17",
+    "sensor_measurement_20",
+    "sensor_measurement_21",
+]
 
 # CMAPSS raw sensor ranges (FD001) for first 5 selected features.
 RAW_SENSOR_BOUNDS = {
@@ -76,6 +99,44 @@ def _to_ui_sensors(raw_features: np.ndarray) -> dict:
     }
 
 ingestion_buffer = HardwareAgnosticBuffer(window_size=WINDOW_SIZE, num_features=NUM_FEATURES)
+async_fusion_buffer = AsyncSensorFusionBuffer(
+    feature_names=CMAPSS_FEATURE_NAMES,
+    window_size=WINDOW_SIZE,
+    target_hz=ASYNC_RESAMPLE_HZ,
+    max_buffer_seconds=ASYNC_MAX_BUFFER_SECONDS,
+)
+
+
+def _parse_feature_payload(raw_payload: bytes):
+    try:
+        decoded = raw_payload.decode().strip()
+    except Exception:
+        return None
+
+    if not decoded:
+        return None
+
+    try:
+        data = json.loads(decoded)
+        if isinstance(data, dict):
+            value = data.get("value")
+            timestamp = data.get("timestamp")
+            if timestamp is None:
+                timestamp = data.get("ts")
+            if isinstance(timestamp, str):
+                # Supports ISO timestamps from edge devices.
+                try:
+                    timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).timestamp()
+                except Exception:
+                    timestamp = None
+            return {"value": value, "timestamp": timestamp}
+    except Exception:
+        pass
+
+    try:
+        return {"value": float(decoded), "timestamp": None}
+    except (TypeError, ValueError):
+        return None
 
 
 def _build_output_mapping(output_details):
@@ -126,11 +187,13 @@ def _build_output_mapping(output_details):
 
     return mapping
 
-def start_subscriber(interpreter, input_details, output_details, scaler, manager, metrics):
+def start_subscriber(interpreter, input_details, output_details, scaler, manager, metrics, fault_localizer=None):
     from src.database import insert_data
     from src.sanitize import sanitize_sensor_dict
 
     output_map = _build_output_mapping(output_details)
+    last_inferred_step = defaultdict(int)
+
     if output_map["direct_uncertainty"]:
         logger.info("[MQTT] Using direct uncertainty outputs from TFLite model")
     else:
@@ -139,23 +202,61 @@ def start_subscriber(interpreter, input_details, output_details, scaler, manager
     def on_connect(client, userdata, flags, rc, properties=None):
         if rc == 0:
             client.subscribe("sensors/+/data")
-            logger.info("[MQTT] Connected and subscribed to CMAPSS sensor stream")
+            client.subscribe("sensors/+/feature/+")
+            logger.info(
+                "[MQTT] Connected and subscribed to array + async feature streams"
+            )
 
     def on_message(client, userdata, msg):
-        try:
-            data = json.loads(msg.payload.decode())
-        except Exception:
-            return
-            
-        machine_id = data.get("machine_id", "M1")
-        try:
-            step = int(data.get("step", 0))
-        except (TypeError, ValueError):
-            step = 0
-        raw_features = data.get("features", [])
-        
-        ingestion_buffer.process_payload(machine_id, step, raw_features)
-        raw_window = ingestion_buffer.get_valid_window(machine_id)
+        topic_parts = msg.topic.split("/")
+        raw_window = None
+        machine_id = "M1"
+        step = 0
+
+        is_feature_stream = (
+            len(topic_parts) >= 4
+            and topic_parts[0] == "sensors"
+            and topic_parts[2] == "feature"
+        )
+
+        if is_feature_stream:
+            machine_id = topic_parts[1]
+            feature_name = topic_parts[3]
+            parsed = _parse_feature_payload(msg.payload)
+            if not parsed:
+                return
+
+            accepted = async_fusion_buffer.process_feature(
+                machine_id=machine_id,
+                feature_name=feature_name,
+                value=parsed.get("value"),
+                timestamp=parsed.get("timestamp"),
+            )
+            if not accepted:
+                return
+
+            current_step = async_fusion_buffer.get_latest_step(machine_id)
+            if current_step <= last_inferred_step[machine_id]:
+                return
+
+            last_inferred_step[machine_id] = current_step
+            step = current_step
+            raw_window = async_fusion_buffer.get_valid_window(machine_id)
+        else:
+            try:
+                data = json.loads(msg.payload.decode())
+            except Exception:
+                return
+
+            machine_id = data.get("machine_id", topic_parts[1] if len(topic_parts) > 1 else "M1")
+            try:
+                step = int(data.get("step", 0))
+            except (TypeError, ValueError):
+                step = 0
+            raw_features = data.get("features", [])
+
+            ingestion_buffer.process_payload(machine_id, step, raw_features)
+            raw_window = ingestion_buffer.get_valid_window(machine_id)
         
         if raw_window is None:
             return
@@ -212,6 +313,59 @@ def start_subscriber(interpreter, input_details, output_details, scaler, manager
             status = "CRITICAL" if prediction < 60 else "WARNING" if prediction < 120 else "HEALTHY"
             stage_probs = [1.0, 0.0, 0.0] if status == "HEALTHY" else [0.0, 1.0, 0.0] if status == "WARNING" else [0.0, 0.0, 1.0]
 
+        ui_sensors = _to_ui_sensors(clean_features)
+        diagnosis = build_realtime_diagnosis(
+            machine_id=machine_id,
+            step=step,
+            prediction=prediction,
+            rul_std=rul_std,
+            status=status,
+            stage_probs=stage_probs,
+            ui_sensors=ui_sensors,
+            raw_features=clean_features,
+        )
+
+        ml_fault = fault_localizer.predict({
+            "machine_id": machine_id,
+            "RUL": prediction,
+            "RUL_std": rul_std,
+            "status": status,
+            "stage_probs": stage_probs,
+            **ui_sensors,
+            **diagnosis,
+        }) if fault_localizer else None
+
+        if ml_fault:
+            diagnosis.update(ml_fault)
+            component = diagnosis.get("fault_component", "")
+            if component in FAULT_PLAYBOOK:
+                diagnosis["fault_type"] = FAULT_PLAYBOOK[component]["fault_type"]
+                diagnosis["probable_causes"] = FAULT_PLAYBOOK[component]["probable_causes"]
+                diagnosis["recommended_actions"] = FAULT_PLAYBOOK[component]["recommended_actions"]
+            else:
+                diagnosis["fault_type"] = "ml_predicted_component_fault"
+                diagnosis["probable_causes"] = [
+                    "Fault pattern recognized by supervised classifier",
+                    "Component not mapped in current playbook",
+                ]
+                diagnosis["recommended_actions"] = [
+                    "Review model explanation and raw telemetry",
+                    "Add component playbook entry and retrain if needed",
+                ]
+            diagnosis["diagnosis_version"] = "v2.0-hybrid-ml"
+        else:
+            diagnosis["fault_model_source"] = "rules"
+            diagnosis["fault_model_version"] = "rules-only"
+            diagnosis["diagnosis_version"] = "v1.0-rule-fusion"
+
+        diagnosis.update(evaluate_alarm({
+            "failure_probability": diagnosis.get("failure_probability", 0.0),
+            "time_to_failure_hours": diagnosis.get("time_to_failure_hours", 0.0),
+            "fault_severity": diagnosis.get("fault_severity", "LOW"),
+            "fault_confidence": diagnosis.get("fault_confidence", 0.0),
+            "fault_component": diagnosis.get("fault_component", "unknown"),
+        }))
+
         result = sanitize_sensor_dict({
             "machine_id": machine_id,
             "step": step,
@@ -220,7 +374,8 @@ def start_subscriber(interpreter, input_details, output_details, scaler, manager
             "status": status,
             "stage_probs": [round(p, 3) for p in stage_probs],
             # Map first 5 CMAPSS features to UI so telemetry bars animate
-            **_to_ui_sensors(clean_features),
+            **ui_sensors,
+            **diagnosis,
         })
 
         try:
@@ -237,6 +392,32 @@ def start_subscriber(interpreter, input_details, output_details, scaler, manager
                 metrics["sensor_tool_wear"].labels(machine_id=machine_id).set(result["tool_wear"])
             if "sensor_speed" in metrics:
                 metrics["sensor_speed"].labels(machine_id=machine_id).set(result["speed"])
+            if "sensor_voltage" in metrics:
+                metrics["sensor_voltage"].labels(machine_id=machine_id).set(result["voltage"])
+            if "sensor_current" in metrics:
+                metrics["sensor_current"].labels(machine_id=machine_id).set(result["current"])
+            if "sensor_power_kw" in metrics:
+                metrics["sensor_power_kw"].labels(machine_id=machine_id).set(result["power_kw"])
+            if "sensor_vibration" in metrics:
+                metrics["sensor_vibration"].labels(machine_id=machine_id).set(result["vibration"])
+            if "machine_health_index" in metrics:
+                metrics["machine_health_index"].labels(machine_id=machine_id).set(result["health_index"])
+            if "failure_probability" in metrics:
+                metrics["failure_probability"].labels(machine_id=machine_id).set(result["failure_probability"])
+            if "time_to_failure_hours" in metrics:
+                metrics["time_to_failure_hours"].labels(machine_id=machine_id).set(result["time_to_failure_hours"])
+            if "fault_component_counter" in metrics:
+                metrics["fault_component_counter"].labels(
+                    machine_id=machine_id,
+                    component=result["fault_component"],
+                    severity=result["fault_severity"],
+                ).inc()
+            if "alarm_events" in metrics:
+                metrics["alarm_events"].labels(
+                    machine_id=machine_id,
+                    level=result.get("alarm_level", "INFO"),
+                    priority=result.get("maintenance_priority", "P4"),
+                ).inc()
         except Exception:
             pass
         
@@ -246,7 +427,11 @@ def start_subscriber(interpreter, input_details, output_details, scaler, manager
             pass
 
         manager.broadcast_from_thread(result)
-        logger.info(f"[MQTT] {machine_id} Step={step} RUL={prediction:.1f}±{rul_std:.1f} {status} {latency*1000:.2f}ms")
+        source = "feature" if is_feature_stream else "array"
+        logger.info(
+            f"[MQTT] {machine_id} Step={step} src={source} "
+            f"RUL={prediction:.1f}±{rul_std:.1f} {status} {latency*1000:.2f}ms"
+        )
 
     client = mqtt.Client(client_id="fastapi-subscriber")
     client.on_connect = on_connect
