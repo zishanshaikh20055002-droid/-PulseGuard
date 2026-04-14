@@ -270,6 +270,19 @@
     .diag-list { list-style: none; display: grid; gap: 7px; }
     .diag-list li { border: 1px solid var(--border); border-radius: 9px; background: rgba(0,0,0,0.2); padding: 8px; font-size: 13px; }
 
+    .score-list { list-style: none; display: grid; gap: 7px; }
+    .score-item {
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: rgba(0,0,0,0.2);
+      padding: 8px;
+    }
+    .score-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 7px; }
+    .score-name { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text); }
+    .score-value { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+    .score-bar-bg { height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .score-bar-fill { height: 100%; width: 0%; background: var(--accent); }
+
     .form-grid { display: grid; gap: 9px; }
     .form-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
     .form-input, .form-select, .form-textarea {
@@ -513,9 +526,24 @@
           <div class="diag-card"><div class="diag-label">Likely Faulted Part</div><div class="diag-value" id="faultComponent">--</div></div>
           <div class="diag-card"><div class="diag-label">Fault Type</div><div class="diag-value" id="faultType">--</div></div>
           <div class="diag-card"><div class="diag-label">Diagnosis Confidence</div><div class="diag-value" id="faultConfidence">--</div></div>
-          <div class="diag-card"><div class="diag-label">Model Source</div><div class="diag-value" id="faultModel">--</div></div>
+          <div class="diag-card"><div class="diag-label">Model Source / Version</div><div class="diag-value" id="faultModel">--</div></div>
           <div class="diag-card"><div class="diag-label">Alarm / Priority</div><div class="diag-value" id="alarmSummary">--</div></div>
+          <div class="diag-card"><div class="diag-label">Alarm Component</div><div class="diag-value" id="alarmComponent">--</div></div>
+          <div class="diag-card"><div class="diag-label">Diagnosis Version</div><div class="diag-value" id="diagnosisVersion">--</div></div>
+          <div class="diag-card"><div class="diag-label">Last Diagnosis Timestamp</div><div class="diag-value" id="diagnosisTimestamp">--</div></div>
         </div>
+
+        <div class="diag-list-title">Stage Probabilities</div>
+        <ul class="score-list" id="stageProbabilities"></ul>
+
+        <div class="diag-list-title">Fault Component Probabilities (ML)</div>
+        <ul class="score-list" id="faultProbabilities"></ul>
+
+        <div class="diag-list-title">Component Risk Scores</div>
+        <ul class="score-list" id="componentScores"></ul>
+
+        <div class="diag-list-title">Component Health (%)</div>
+        <ul class="score-list" id="componentHealth"></ul>
 
         <div class="diag-list-title">Probable Causes</div>
         <ul class="diag-list" id="faultCauses"></ul>
@@ -716,6 +744,51 @@ function setList(id, items, emptyText = 'Awaiting updates...') {
     return;
   }
   el.innerHTML = arr.map(v => `<li>${escapeHtml(v)}</li>`).join('');
+}
+
+function formatEntityLabel(value) {
+  return String(value || '--').replace(/_/g, ' ').toUpperCase();
+}
+
+function renderScoreMap(id, scoreMap, options = {}) {
+  const {
+    valueMultiplier = 100,
+    valueSuffix = '%',
+    barMultiplier = 100,
+    descending = true,
+    emptyText = 'No score data available.',
+  } = options;
+
+  const el = document.getElementById(id);
+  const entries = scoreMap && typeof scoreMap === 'object' ? Object.entries(scoreMap) : [];
+
+  if (!entries.length) {
+    el.innerHTML = `<li>${escapeHtml(emptyText)}</li>`;
+    return;
+  }
+
+  const sorted = entries.sort((a, b) => {
+    const av = Number(a[1] ?? 0);
+    const bv = Number(b[1] ?? 0);
+    return descending ? bv - av : av - bv;
+  });
+
+  el.innerHTML = sorted.map(([name, rawValue]) => {
+    const val = Number(rawValue ?? 0);
+    const safe = Number.isFinite(val) ? val : 0;
+    const pct = Math.max(0, Math.min(100, safe * barMultiplier));
+    const display = safe * valueMultiplier;
+
+    return `
+      <li class="score-item">
+        <div class="score-head">
+          <span class="score-name">${escapeHtml(formatEntityLabel(name))}</span>
+          <span class="score-value">${escapeHtml(display.toFixed(1))}${escapeHtml(valueSuffix)}</span>
+        </div>
+        <div class="score-bar-bg"><div class="score-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
+      </li>
+    `;
+  }).join('');
 }
 
 function updateSensor(id, val, maxVal, suffix = '') {
@@ -925,11 +998,51 @@ function renderMachine(snapshot) {
   severityEl.textContent = `${severity} / ${alarmLevel}`;
   severityEl.className = `fault-pill ${alarmLevel}`;
 
-  document.getElementById('faultComponent').textContent = String(snapshot.fault_component || '--').toUpperCase();
+  document.getElementById('faultComponent').textContent = formatEntityLabel(snapshot.fault_component);
   document.getElementById('faultType').textContent = String(snapshot.fault_type || '--');
   document.getElementById('faultConfidence').textContent = `${(Number(snapshot.fault_confidence ?? 0) * 100).toFixed(1)}%`;
   document.getElementById('faultModel').textContent = `${String(snapshot.fault_model_source || 'rules').toUpperCase()} • ${String(snapshot.fault_model_version || 'rules-only')}`;
   document.getElementById('alarmSummary').textContent = `${alarmLevel} • ${String(snapshot.maintenance_priority || 'P4')} • ${Number(snapshot.recommended_window_hours ?? 0).toFixed(1)}h`;
+  document.getElementById('alarmComponent').textContent = formatEntityLabel(snapshot.alarm_component || snapshot.fault_component);
+  document.getElementById('diagnosisVersion').textContent = String(snapshot.diagnosis_version || '--');
+  document.getElementById('diagnosisTimestamp').textContent = String(snapshot.timestamp || '--');
+
+  const stage = Array.isArray(snapshot.stage_probs) ? snapshot.stage_probs : [];
+  renderScoreMap('stageProbabilities', {
+    healthy: Number(stage[0] ?? 0),
+    warning: Number(stage[1] ?? 0),
+    critical: Number(stage[2] ?? 0),
+  }, {
+    valueMultiplier: 100,
+    valueSuffix: '%',
+    barMultiplier: 100,
+    descending: true,
+    emptyText: 'Stage probabilities unavailable.',
+  });
+
+  renderScoreMap('faultProbabilities', snapshot.fault_component_probabilities, {
+    valueMultiplier: 100,
+    valueSuffix: '%',
+    barMultiplier: 100,
+    descending: true,
+    emptyText: 'ML component probabilities unavailable.',
+  });
+
+  renderScoreMap('componentScores', snapshot.component_scores, {
+    valueMultiplier: 100,
+    valueSuffix: '%',
+    barMultiplier: 100,
+    descending: true,
+    emptyText: 'Component risk scores unavailable.',
+  });
+
+  renderScoreMap('componentHealth', snapshot.component_health, {
+    valueMultiplier: 1,
+    valueSuffix: '%',
+    barMultiplier: 1,
+    descending: false,
+    emptyText: 'Component health unavailable.',
+  });
 
   setList('faultCauses', snapshot.probable_causes, 'Awaiting diagnosis causes...');
   setList('faultActions', snapshot.recommended_actions, 'Awaiting recommended actions...');
