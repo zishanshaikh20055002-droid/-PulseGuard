@@ -7,6 +7,7 @@ Documentation Hub
 - Teacher Q and A bank: docs/TEACHER_QA_BANK.md
 - Timeline and major changes: docs/PROJECT_TIMELINE_AND_CHANGES.md
 - Evaluation and accuracy guide: docs/EVALUATION_AND_ACCURACY.md
+- System diagrams: docs/SYSTEM_DIAGRAMS.md
 - Training deep dive: TRAINING_GUIDE.md
 
 1. Introduction
