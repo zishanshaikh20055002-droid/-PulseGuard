@@ -956,6 +956,7 @@ def start_subscriber(runtime_bundle, manager, metrics, fault_localizer=None):
             diagnosis["diagnosis_version"] = "v1.0-rule-fusion"
 
         diagnosis.update(evaluate_alarm({
+            "status": status,
             "failure_probability": diagnosis.get("failure_probability", 0.0),
             "time_to_failure_hours": diagnosis.get("time_to_failure_hours", 0.0),
             "fault_severity": diagnosis.get("fault_severity", "LOW"),

@@ -31,7 +31,7 @@ def _env_int(name: str, default: int) -> int:
 
 
 PUBLISH_RATE = max(0.05, _env_float("PUBLISH_RATE", 1.0))
-PUBLISH_START_STEP = max(0, _env_int("PUBLISH_START_STEP", 100))
+PUBLISH_START_STEP = max(0, _env_int("PUBLISH_START_STEP", 0))
 
 
 def _machine_id_to_unit(machine_id: str) -> int:
