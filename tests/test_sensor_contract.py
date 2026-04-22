@@ -18,6 +18,16 @@ def test_packet_requires_single_or_multi_payload():
         RealSensorPacket(machine_id="M1")
 
 
+def test_packet_rejects_mixed_single_and_multi_payload():
+    with pytest.raises(ValidationError):
+        RealSensorPacket(
+            machine_id="M1",
+            feature="torque",
+            value=12.3,
+            values={"speed rpm": 1200.0},
+        )
+
+
 def test_canonicalize_feature_name_maps_aliases():
     assert canonicalize_feature_name("torque") == "sensor_measurement_4"
     assert canonicalize_feature_name("Air Temperature") == "sensor_measurement_3"

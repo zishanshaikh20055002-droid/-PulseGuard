@@ -34,7 +34,7 @@ if ($ForceSavedModelMode) {
     Write-Host "[verify] forcing runtime mode: multimodal_savedmodel"
 }
 
-& $pythonExe -c "import app; print('runtime_mode=', app.runtime_bundle.get('mode')); import src.mqtt_subscriber; print('mqtt_subscriber_import=ok')"
+& $pythonExe -c "import app; print('app_import=ok'); bundle = app._load_runtime_bundle(); print('runtime_mode=', bundle.get('mode')); import src.mqtt_subscriber; print('mqtt_subscriber_import=ok')"
 if ($LASTEXITCODE -ne 0) {
     throw "runtime import smoke failed"
 }

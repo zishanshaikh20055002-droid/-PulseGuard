@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-import tensorflow as tf
 import paho.mqtt.publish as mqtt_publish
 
 from src.auth import (
@@ -38,6 +37,7 @@ from src.metrics import (
     fault_component_counter, alarm_events,
     drift_score_gauge, drift_detected_flag, drift_rows_gauge,
     auto_retrain_runs, feedback_relabels_total, feedback_pending_gauge, feedback_ready_gauge,
+    telemetry_drop_events, telemetry_persistence_errors,
 )
 from src.ws_manager import manager
 from src.mqtt_subscriber import start_subscriber
@@ -126,6 +126,8 @@ def _infer_mode(path: str) -> str:
 
 
 def _load_runtime_bundle():
+    import tensorflow as tf
+
     scaler_obj = _load_scaler(SCALER_PATH)
     candidates = _resolve_runtime_candidates()
     last_error = ""
@@ -189,9 +191,6 @@ def _load_runtime_bundle():
     )
 
 
-runtime_bundle = _load_runtime_bundle()
-fault_localizer = FaultLocalizer()
-
 # ── Metrics bundle ────────────────────────────────────────────
 metrics = {
     "rul_gauge":             rul_gauge,
@@ -218,9 +217,9 @@ metrics = {
     "feedback_relabels_total": feedback_relabels_total,
     "feedback_pending_gauge":  feedback_pending_gauge,
     "feedback_ready_gauge":    feedback_ready_gauge,
+    "telemetry_drop_events": telemetry_drop_events,
+    "telemetry_persistence_errors": telemetry_persistence_errors,
 }
-
-retrain_coordinator = AutoRetrainCoordinator(fault_localizer=fault_localizer, metrics=metrics)
 
 
 class FeedbackRelabelRequest(BaseModel):
@@ -259,8 +258,42 @@ ws_connections: dict = defaultdict(int)
 WS_MAX_PER_IP = 3
 
 # ── Startup ───────────────────────────────────────────────────
+def _runtime_unavailable_detail() -> str:
+    return getattr(app.state, "startup_error", "") or "Runtime resources are not ready"
+
+
+def _require_runtime_ready():
+    if not getattr(app.state, "runtime_ready", False):
+        raise HTTPException(status_code=503, detail=_runtime_unavailable_detail())
+
+
+def _get_fault_localizer() -> FaultLocalizer:
+    _require_runtime_ready()
+    return app.state.fault_localizer
+
+
+def _get_retrain_coordinator() -> AutoRetrainCoordinator:
+    _require_runtime_ready()
+    return app.state.retrain_coordinator
+
+
 @app.on_event("startup")
 async def startup():
+    app.state.runtime_ready = False
+    app.state.startup_error = ""
+
+    try:
+        runtime_bundle = _load_runtime_bundle()
+        fault_localizer = FaultLocalizer()
+        retrain_coordinator = AutoRetrainCoordinator(
+            fault_localizer=fault_localizer,
+            metrics=metrics,
+        )
+    except Exception as exc:
+        app.state.startup_error = _compact_error(exc, limit=500)
+        print(f"[STARTUP] Runtime resources unavailable: {app.state.startup_error}")
+        return
+
     loop = asyncio.get_running_loop()
     manager.set_loop(loop)
 
@@ -271,12 +304,19 @@ async def startup():
         name="mqtt-subscriber",
     )
     thread.start()
+    app.state.runtime_bundle = runtime_bundle
+    app.state.fault_localizer = fault_localizer
+    app.state.retrain_coordinator = retrain_coordinator
+    app.state.mqtt_thread = thread
+    app.state.runtime_ready = True
     retrain_coordinator.start()
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    retrain_coordinator.stop()
+    retrain_coordinator = getattr(app.state, "retrain_coordinator", None)
+    if retrain_coordinator is not None:
+        retrain_coordinator.stop()
 
 # ── Auth ──────────────────────────────────────────────────────
 @app.post("/auth/login", response_model=Token, tags=["Auth"])
@@ -311,7 +351,11 @@ def home(request: Request):
 
 @app.get("/health", tags=["General"])
 def health():
-    return {"status": "ok"}
+    runtime_ready = bool(getattr(app.state, "runtime_ready", False))
+    payload = {"status": "ok", "runtime_ready": runtime_ready}
+    if not runtime_ready and getattr(app.state, "startup_error", ""):
+        payload["runtime_error"] = app.state.startup_error
+    return payload
 
 
 @app.get("/diagnosis/latest/{machine_id}", tags=["Diagnosis"])
@@ -470,6 +514,7 @@ def feedback_resolve(
 @app.get("/retraining/status", tags=["Retraining"])
 @limiter.limit("120/minute")
 def retraining_status(request: Request, current_user: User = Depends(get_current_user)):
+    retrain_coordinator = _get_retrain_coordinator()
     return {
         "requested_by": current_user.username,
         "status": retrain_coordinator.status(),
@@ -483,6 +528,7 @@ def retraining_run_now(
     request: Request,
     current_user: User = Depends(require_admin),
 ):
+    retrain_coordinator = _get_retrain_coordinator()
     status = retrain_coordinator.trigger_manual(
         requested_by=current_user.username,
         reason=sanitize_string(payload.reason, max_length=180),
@@ -497,12 +543,14 @@ def retraining_run_now(
 @app.get("/diagnosis/model/fault-localizer", tags=["Diagnosis"])
 @limiter.limit("60/minute")
 def fault_localizer_info(request: Request):
+    fault_localizer = _get_fault_localizer()
     return fault_localizer.info()
 
 
 @app.post("/diagnosis/model/fault-localizer/reload", tags=["Diagnosis"])
 @limiter.limit("20/minute")
 def fault_localizer_reload(request: Request, current_user: User = Depends(require_admin)):
+    fault_localizer = _get_fault_localizer()
     fault_localizer.reload()
     return {
         "message": "fault localizer reloaded",

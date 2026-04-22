@@ -82,6 +82,8 @@ class RealSensorPacket(BaseModel):
 
         if not (has_single or has_multi):
             raise ValueError("Provide either feature+value or values dict")
+        if has_single and has_multi:
+            raise ValueError("Provide either feature+value or values dict, not both")
         return self
 
 

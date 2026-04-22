@@ -58,3 +58,13 @@ feedback_ready_gauge = Gauge(
 	"fault_feedback_ready_for_training",
 	"Resolved feedback labels not yet consumed by retraining",
 )
+telemetry_drop_events = Counter(
+    "telemetry_drop_events_total",
+    "Dropped telemetry messages by source and reason",
+    ["source", "reason"],
+)
+telemetry_persistence_errors = Counter(
+    "telemetry_persistence_errors_total",
+    "Telemetry records that failed database persistence by source",
+    ["source"],
+)

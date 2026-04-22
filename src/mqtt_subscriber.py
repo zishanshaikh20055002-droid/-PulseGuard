@@ -763,6 +763,7 @@ def start_subscriber(runtime_bundle, manager, metrics, fault_localizer=None):
             and topic_parts[0] == "sensors"
             and topic_parts[2] == "feature"
         )
+        source = "feature" if is_feature_stream else "array"
 
         if is_feature_stream:
             machine_id = topic_parts[1]
@@ -808,7 +809,18 @@ def start_subscriber(runtime_bundle, manager, metrics, fault_localizer=None):
 
         try:
             scaled_window = scaler.transform(raw_window[0])
-        except Exception:
+        except Exception as exc:
+            logger.exception(
+                "[MQTT] Dropping %s telemetry for %s: scaler transform failed: %s",
+                source,
+                machine_id,
+                exc,
+            )
+            if "telemetry_drop_events" in metrics:
+                metrics["telemetry_drop_events"].labels(
+                    source=source,
+                    reason="scaler_transform",
+                ).inc()
             return
         base_sample = scaled_window.reshape(1, WINDOW_SIZE, NUM_FEATURES).astype(np.float32)
         clean_features = raw_window[0][-1]
@@ -1021,11 +1033,18 @@ def start_subscriber(runtime_bundle, manager, metrics, fault_localizer=None):
         
         try:
             insert_data(result)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.exception(
+                "[MQTT] Failed to persist %s telemetry for %s step=%s: %s",
+                source,
+                machine_id,
+                step,
+                exc,
+            )
+            if "telemetry_persistence_errors" in metrics:
+                metrics["telemetry_persistence_errors"].labels(source=source).inc()
 
         manager.broadcast_from_thread(result)
-        source = "feature" if is_feature_stream else "array"
         logger.info(
             f"[MQTT] {machine_id} Step={step} src={source} "
             f"RUL={prediction:.1f}±{rul_std:.1f} {status} {latency*1000:.2f}ms"

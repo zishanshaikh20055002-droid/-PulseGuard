@@ -219,20 +219,66 @@ docker-compose.yml         Local stack orchestration
 pip install -r requirements.txt
 ```
 
-### 2. Start the stack
+### 2. Configure authentication
+
+For local demos, Docker Compose starts the API with `APP_ENV=development`. In that mode the built-in demo accounts remain available unless you override them:
+- `admin` / `admin123`
+- `operator` / `operator123`
+
+For any shared, hosted, or production-like run, set a real JWT secret and password hashes before starting the API:
+
+```bash
+set JWT_SECRET_KEY=<strong-random-secret>
+set ADMIN_PASSWORD_HASH=<bcrypt-hash>
+set OPERATOR_PASSWORD_HASH=<bcrypt-hash>
+```
+
+You can also provide all users through `AUTH_USERS_JSON`:
+
+```json
+{"admin":{"hashed_password":"$2b$...","role":"admin"}}
+```
+
+When `APP_ENV` is not a dev/test/local value, the API refuses to start without a configured `JWT_SECRET_KEY` and at least one configured user source.
+
+### 3. Start the stack
 
 ```bash
 docker compose up --build
 ```
 
-### 3. Open the system
+### 4. Open the system
 
 - API: `http://localhost:8000`
 - Dashboard: open `dashboard.html`
 - Prometheus: `http://localhost:9090`
 - Grafana: `http://localhost:3000`
 
+The health endpoint returns both process and runtime readiness:
+
+```json
+{"status":"ok","runtime_ready":true}
+```
+
+If model/scaler/runtime artifacts cannot load, the API process can still answer `/health`, but runtime-dependent endpoints return `503` until the startup issue is fixed.
+
 ## Useful commands
+
+### Run tests
+
+```bash
+pip install -r requirements-test.txt
+pytest -q
+```
+
+If the virtual environment was created from a removed Windows Store Python, recreate it with a real Python install:
+
+```powershell
+Remove-Item -Recurse -Force .venv
+py -3.11 -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt -r requirements-test.txt
+.\.venv\Scripts\python -m pytest -q
+```
 
 ### Verify datasets
 
@@ -334,6 +380,16 @@ Rate limiting prevents abuse
 Role-based access restricts critical operations
 
 Input validation prevents malformed requests
+
+Production authentication must be configured through environment variables. The API no longer trusts the role embedded in a JWT by itself; it decodes the token, looks up the current user server-side, and derives the role from configured user records.
+
+Required outside development:
+
+JWT_SECRET_KEY: strong signing secret.
+
+AUTH_USERS_JSON or ADMIN_PASSWORD_HASH / OPERATOR_PASSWORD_HASH: bcrypt password hashes for allowed users.
+
+Development-only defaults are enabled only when APP_ENV is set to development, dev, local, test, or testing.
 
 
 

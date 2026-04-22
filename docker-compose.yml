@@ -19,6 +19,8 @@ services:
       - ./models:/app/models
     environment:
       - PYTHONUNBUFFERED=1
+      - APP_ENV=${APP_ENV:-development}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - MQTT_BROKER=mosquitto
       - MQTT_PORT=1883
       - RUNTIME_MODEL_MODE=${RUNTIME_MODEL_MODE:-tflite}
