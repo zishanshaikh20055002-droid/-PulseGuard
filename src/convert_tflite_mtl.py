@@ -14,7 +14,6 @@ def representative_data_gen():
     data_path = os.path.join(BASE_DIR, "data", "X_mtl.npy")
     try:
         X = np.load(data_path)
-        # Select 200 random samples for calibration
         indices = np.random.choice(len(X), size=min(200, len(X)), replace=False)
         for i in indices:
             yield [X[i:i+1].astype(np.float32)]
@@ -27,7 +26,6 @@ def convert_model():
     print(f"Loading MTL model from {MODEL_PATH}...")
     model = tf.keras.models.load_model(MODEL_PATH)
     
-    # Force Dropout layers to remain active for manual MC Dropout inference
     for layer in model.layers:
         if isinstance(layer, tf.keras.layers.Dropout):
             layer.training = True
@@ -45,9 +43,8 @@ def convert_model():
         f.write(tflite_model)
 
     size_kb = len(tflite_model) / 1024
-    print(f"✅ Conversion complete. Saved at {OUT_PATH} ({size_kb:.1f} KB)")
+    print(f"âœ… Conversion complete. Saved at {OUT_PATH} ({size_kb:.1f} KB)")
     
-    # Verify outputs
     interp = tf.lite.Interpreter(model_path=OUT_PATH)
     interp.allocate_tensors()
     print("\nOutputs:")

@@ -397,7 +397,6 @@ def evaluate(
 - Dataset: {dataset_path}
 - Samples evaluated: {len(subset_idx)}
 
-## Core Results
 
 - Best epoch: {best_epoch_text}
 - Best val_loss: {best_val_loss_text}
@@ -407,7 +406,6 @@ def evaluate(
 - Anomaly AUC: {anomaly_auc_text}
 - AUC trend: {auc_text}
 
-## Runtime Sanity (Process-only Adapter)
 
 - Adapter sample count: {runtime_n}
 - Mean runtime RUL: {float(np.mean(runtime_rul)):.4f}
@@ -425,7 +423,6 @@ def evaluate(
   - RUNTIME_MODEL_PATH={model_path}
   - MC_PASSES_MULTIMODAL=12
 
-## Artifacts
 
 - Evaluation report: {eval_report_path}
 - Training card: {result_card_path}

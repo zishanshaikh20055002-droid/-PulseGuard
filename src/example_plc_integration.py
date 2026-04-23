@@ -4,10 +4,8 @@ example_plc_integration.py
 Example: End-to-end integration of domain adaptation + PLC hardware bridge.
 
 Usage:
-    # Start PLC streaming with MQTT publishing
     python src/example_plc_integration.py --protocol modbus --host 192.168.1.100 --port 502
     
-    # Or with file polling (for demos/testing)
     python src/example_plc_integration.py --protocol file --file-path /tmp/sensor_data.json
 """
 
@@ -68,12 +66,8 @@ def on_sensor_update_fn(model: tf.keras.Model):
     """
     def on_reading(packet: RealSensorPacket, updates: list) -> None:
         try:
-            # Accumulate sensor values into inference window
             logger.info(f"Received update from {packet.machine_id}: {len(updates)} features")
             
-            # Example: In production, buffer these into Windows and run periodic inference
-            # model_output = model.predict([X_window])
-            # Publish diagnosis to MQTT
         except Exception as e:
             logger.error(f"Inference callback error: {e}")
     
@@ -88,17 +82,15 @@ def example_domain_adaptation_training():
     print("DOMAIN ADAPTATION TRAINING EXAMPLE")
     print("="*60)
     
-    # Load pre-trained base model
     model_path = "models/best_multimodal_mtl.keras"
     if not os.path.exists(model_path):
-        print(f"❌ Base model not found at {model_path}")
+        print(f"âŒ Base model not found at {model_path}")
         print("   Run: python -m src.train_multimodal_mtl --epochs 30")
         return
     
-    print(f"✅ Loading base model from {model_path}")
+    print(f"âœ… Loading base model from {model_path}")
     base_model = tf.keras.models.load_model(model_path)
     
-    # Wrap with domain adaptation layers
     try:
         adapted_model, feature_extractor = build_domain_adapted_mtl_model(
             base_model,
@@ -106,12 +98,11 @@ def example_domain_adaptation_training():
             use_mmd=True,
             use_dann=True,
         )
-        print("✅ Added domain adaptation components (MMD + DANN + Gradient Reversal)")
+        print("âœ… Added domain adaptation components (MMD + DANN + Gradient Reversal)")
     except Exception as e:
-        print(f"❌ Domain adaptation build error: {e}")
+        print(f"âŒ Domain adaptation build error: {e}")
         return
     
-    # Compile with domain losses
     adapted_model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
         loss=[
@@ -128,17 +119,15 @@ def example_domain_adaptation_training():
         }
     )
     
-    # Add progressive unfreezing callback
     callback = DomainAdaptationCallback(
         frozen_layers=[
             "process_conv1", "process_conv2", "process_bilstm",
             "vibration_conv1", "vibration_conv2", "vibration_bilstm",
-            # ... other encoder layers
         ],
         total_epochs=20,
     )
     
-    print("\n✅ Domain-adapted model ready for training:")
+    print("\nâœ… Domain-adapted model ready for training:")
     print("   - Shared encoders for all modalities")
     print("   - Domain discriminator with gradient reversal")
     print("   - MMD loss for invariant representations")
@@ -154,7 +143,6 @@ def example_plc_streaming():
     print("PLC STREAMING EXAMPLE")
     print("="*60)
     
-    # Create demo sensor data file for testing
     demo_data = {
         "temperature": 310.5,
         "torque": 45.2,
@@ -168,9 +156,8 @@ def example_plc_streaming():
     with open(demo_file, "w") as f:
         json.dump(demo_data, f)
     
-    print(f"✅ Created demo sensor file: {demo_file}")
+    print(f"âœ… Created demo sensor file: {demo_file}")
     
-    # Configure PLC connection (file-based for demo)
     config = PLCConfig(
         protocol="file",
         host="localhost",
@@ -180,19 +167,17 @@ def example_plc_streaming():
         file_path=str(demo_file),
     )
     
-    print(f"✅ PLC Config: {config.protocol} from {config.file_path}")
+    print(f"âœ… PLC Config: {config.protocol} from {config.file_path}")
     
-    # Create PLC connection
     try:
         plc_conn = create_plc_connection(config)
-        print(f"✅ Created {plc_conn.__class__.__name__}")
+        print(f"âœ… Created {plc_conn.__class__.__name__}")
     except Exception as e:
-        print(f"❌ Connection error: {e}")
+        print(f"âŒ Connection error: {e}")
         return
     
-    # Create streaming buffer (without real MQTT for demo)
     def demo_callback(packet: RealSensorPacket, updates: list):
-        logger.info(f"📊 Received: {packet.machine_id} @ {packet.timestamp}")
+        logger.info(f"ðŸ“Š Received: {packet.machine_id} @ {packet.timestamp}")
         for upd in updates:
             logger.info(f"  - {upd['feature']}: {upd['value']}")
     
@@ -202,8 +187,7 @@ def example_plc_streaming():
         on_reading=demo_callback,
     )
     
-    # Start streaming for demo
-    print("\n✅ Starting PLC stream (will collect 5 readings)...")
+    print("\nâœ… Starting PLC stream (will collect 5 readings)...")
     if buffer.start():
         readings_collected = 0
         while readings_collected < 5 and buffer.running:
@@ -213,9 +197,9 @@ def example_plc_streaming():
             logger.info(f"Buffered readings so far: {readings_collected}")
         
         buffer.stop()
-        print(f"\n✅ Collected {readings_collected} sensor readings")
+        print(f"\nâœ… Collected {readings_collected} sensor readings")
     else:
-        print("❌ Failed to start PLC stream")
+        print("âŒ Failed to start PLC stream")
 
 
 def main():
@@ -235,7 +219,7 @@ def main():
         example_plc_streaming()
     
     print("\n" + "="*60)
-    print("✅ EXAMPLES COMPLETE")
+    print("âœ… EXAMPLES COMPLETE")
     print("="*60)
 
 

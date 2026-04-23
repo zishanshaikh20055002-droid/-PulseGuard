@@ -17,8 +17,6 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-# Common aliases expected from real deployments; values map to current CMAPSS
-# channels used by the runtime inference buffer.
 CANONICAL_FEATURE_ALIASES = {
     "temp_process_k": "sensor_measurement_2",
     "process_temperature": "sensor_measurement_2",

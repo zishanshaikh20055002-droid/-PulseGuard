@@ -76,7 +76,6 @@ def convert_model(
         tf.lite.OpsSet.SELECT_TF_OPS,
     ]
 
-    # BiLSTM-heavy graphs are more reliable with this setting during conversion.
     converter._experimental_lower_tensor_list_ops = False
 
     quantization = quantization.strip().lower()
@@ -104,7 +103,6 @@ def convert_model(
 
     print(f"Saved TFLite model: {out_path} ({len(tflite_model) / 1024:.1f} KB)")
 
-    # Quick runtime verification of tensor signatures.
     interpreter = tf.lite.Interpreter(model_path=out_path)
     interpreter.allocate_tensors()
     print("Input tensors:")

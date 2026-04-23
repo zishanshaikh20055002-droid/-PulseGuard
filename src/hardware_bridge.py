@@ -43,7 +43,6 @@ BRIDGE_MODE = os.getenv("HARDWARE_BRIDGE_MODE", "emulate").strip().lower()
 SERIAL_PORT = os.getenv("SERIAL_PORT", "")
 SERIAL_BAUD = int(os.getenv("SERIAL_BAUD", "115200"))
 
-# Example heterogeneous rates (Hz): fast, medium, slow sensors.
 FEATURE_RATES_HZ = {
     "sensor_measurement_2": 1.0,
     "sensor_measurement_3": 1.0,

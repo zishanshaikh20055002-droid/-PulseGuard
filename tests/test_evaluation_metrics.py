@@ -70,7 +70,6 @@ def test_uncertainty_metrics_interval_width_and_coverage():
 
     assert out["target_coverage"] == 0.95
     assert out["coverage"] == 1.0
-    # For 95% interval, width ~= 2 * 1.96 * 0.1
     assert abs(out["avg_interval_width"] - 0.392) < 0.03
 
 

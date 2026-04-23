@@ -1,6 +1,5 @@
 Edge AI Predictive Maintenance System
 
-
 1. Introduction
 
 This project presents a real-time predictive maintenance system designed to monitor machine health, estimate Remaining Useful Life (RUL), and provide early warnings of potential failures.
@@ -196,6 +195,10 @@ There is no single accuracy number for the whole project. We evaluate task-wise:
 - uncertainty: coverage, interval width, miscalibration
 
 That is the correct way to evaluate a multi-task maintenance system.
+
+## Project documentation
+
+- Training guide: [TRAINING_GUIDE.md](TRAINING_GUIDE.md)
 
 
 ## Repository structure

@@ -13,7 +13,6 @@ def train():
     y_faults = np.load(os.path.join(BASE_DIR, "data", "y_faults_mtl.npy"))
     y_recon = np.load(os.path.join(BASE_DIR, "data", "y_recon_mtl.npy"))
 
-    # Split the data into train and validation sets
     X_train, X_val, y_train_rul, y_val_rul, y_train_faults, y_val_faults, y_train_recon, y_val_recon = train_test_split(
         X, y_rul, y_faults, y_recon, test_size=0.2, random_state=42
     )
@@ -21,7 +20,6 @@ def train():
     print("Building Multi-Task Transformer...")
     model = build_mtl_transformer(window_size=30, num_features=5)
 
-    # Compile with multiple losses and custom weights
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
         loss={
@@ -49,7 +47,7 @@ def train():
         )
     ]
 
-    print("\n🚀 Starting Multi-Task Training on RTX 3050A...")
+    print("\nðŸš€ Starting Multi-Task Training on RTX 3050A...")
     model.fit(
         X_train,
         {
@@ -69,7 +67,7 @@ def train():
         batch_size=64,
         callbacks=callbacks
     )
-    print("✅ Training complete. Best model saved to models/best_mtl_model.keras")
+    print("âœ… Training complete. Best model saved to models/best_mtl_model.keras")
 
 if __name__ == "__main__":
     train()

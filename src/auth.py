@@ -13,8 +13,6 @@ from pydantic import BaseModel
 APP_ENV = os.getenv("APP_ENV", "production").strip().lower()
 IS_DEV = APP_ENV in {"dev", "development", "local", "test", "testing"}
 
-# In non-dev environments this must be configured. Generate one with:
-#   openssl rand -hex 32
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "").strip()
 if not SECRET_KEY:
     if IS_DEV:

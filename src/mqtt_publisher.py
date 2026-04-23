@@ -12,7 +12,6 @@ MQTT_BROKER = os.getenv("MQTT_BROKER", "mosquitto")
 MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
 MACHINE_ID = os.getenv("MACHINE_ID", "M1").strip().upper() or "M1"
 
-# Using the complete run-to-failure training file so we have plenty of data
 DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "train_FD001.txt")
 
 
@@ -59,29 +58,23 @@ def start_publishing():
               [f'sensor_measurement_{i}' for i in range(1, 22)]
     df = pd.read_csv(DATA_PATH, sep=r'\s+', names=columns)
     
-    # Filter to selected machine/unit
     df_m1 = df[df['unit_number'] == unit_number].copy()
     if df_m1.empty:
         logger.warning(f"Unit {unit_number} not found in dataset. Falling back to unit 1.")
         df_m1 = df[df['unit_number'] == 1].copy()
         unit_number = 1
     
-    # 14 features used in the CMAPSS model
     features = [f'sensor_measurement_{i}' for i in [2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 17, 20, 21]]
     
-    # Fast forward for faster warm-up to degradation phase
     start_index = min(PUBLISH_START_STEP, max(0, len(df_m1) - 1))
     logger.info(f"Fast-forwarding to step {start_index} to observe active degradation...")
     
-    # Convert to a Python list of dictionaries first to completely bypass Pandas index issues
     records = df_m1[features].to_dict('records')
     
-    # Slice the clean Python list
     sliced_records = records[start_index:]
     
     step = start_index
     for row in sliced_records:
-        # Extract the values from the dictionary in the correct order
         feature_values = [row[feat] for feat in features]
         
         payload = {

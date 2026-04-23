@@ -2,7 +2,7 @@
 evaluation_metrics.py
 
 Comprehensive evaluation metrics for multi-task learning models:
-- RUL: MAE, RMSE, MAPE, R²
+- RUL: MAE, RMSE, MAPE, RÂ²
 - Faults: Precision, Recall, F1 per class + macro/micro averages
 - Anomaly: ROC-AUC, PR-AUC, F1@threshold
 - Uncertainty: Coverage vs. accuracy of predictive intervals
@@ -28,7 +28,7 @@ def rul_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
     Compute RUL prediction metrics.
     
     Returns:
-        Dict with MAE, RMSE, MAPE, R²
+        Dict with MAE, RMSE, MAPE, RÂ²
     """
     y_true = np.asarray(y_true, dtype=np.float32).flatten()
     y_pred = np.asarray(y_pred, dtype=np.float32).flatten()
@@ -36,17 +36,13 @@ def rul_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
     if len(y_true) == 0:
         return {"mae": np.nan, "rmse": np.nan, "mape": np.nan, "r2": np.nan}
     
-    # Mean Absolute Error
     mae = float(np.mean(np.abs(y_true - y_pred)))
     
-    # Root Mean Squared Error
     rmse = float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
     
-    # Mean Absolute Percentage Error (handle zero divisions)
     safe_true = np.where(np.abs(y_true) < 1e-6, 1e-6, y_true)
     mape = float(np.mean(np.abs((y_true - y_pred) / safe_true))) * 100.0
     
-    # R² Score
     ss_res = np.sum((y_true - y_pred) ** 2)
     ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
     r2 = 1.0 - (ss_res / (ss_tot + 1e-8)) if ss_tot > 0 else 0.0
@@ -89,14 +85,12 @@ def fault_metrics(
     y_pred_binary = (y_pred > threshold).astype(np.float32)
     n_classes = y_true.shape[1]
     
-    # Per-class metrics
     per_class = {}
     for c in range(n_classes):
         y_c_true = y_true[:, c]
         y_c_pred = y_pred[:, c]
         y_c_pred_binary = y_pred_binary[:, c]
         
-        # Skip if class is absent in both true and pred
         if np.sum(y_c_true) == 0 and np.sum(y_c_pred_binary) == 0:
             per_class[f"class_{c}"] = {
                 "precision": 1.0,
@@ -127,7 +121,6 @@ def fault_metrics(
             except Exception:
                 per_class[f"class_{c}"]["roc_auc"] = np.nan
     
-    # Macro/Micro averages
     macro_f1 = float(np.nanmean([v["f1"] for v in per_class.values()]))
     accuracy = float(accuracy_score(y_true, y_pred_binary))
     hamming = float(hamming_loss(y_true, y_pred_binary))
@@ -163,7 +156,6 @@ def anomaly_metrics(
     if len(y_true) == 0:
         return {"roc_auc": np.nan, "pr_auc": np.nan}
     
-    # ROC-AUC
     if len(np.unique(y_true)) < 2:
         roc_auc = np.nan
     else:
@@ -172,7 +164,6 @@ def anomaly_metrics(
         except Exception:
             roc_auc = np.nan
     
-    # PR-AUC with F1@optimal threshold (unless threshold override is provided)
     pr_auc = np.nan
     best_threshold = 0.5 if threshold is None else float(np.clip(threshold, 0.0, 1.0))
     
@@ -181,7 +172,6 @@ def anomaly_metrics(
             precision, recall, thresholds = precision_recall_curve(y_true, y_pred)
             pr_auc = float(auc(recall, precision))
             
-            # Find F1-optimal threshold
             f1_scores = 2 * (precision * recall) / (precision + recall + 1e-8)
             best_idx = np.nanargmax(f1_scores)
             if threshold is None:
@@ -232,7 +222,6 @@ def uncertainty_metrics(
     
     percentile = float(np.clip(percentile, 1e-6, 1.0 - 1e-6))
 
-    # Two-sided normal interval, e.g. percentile=0.95 -> z=1.96
     try:
         from scipy.stats import norm
 
@@ -250,18 +239,14 @@ def uncertainty_metrics(
     lower = y_pred - z_score * uncertainty
     upper = y_pred + z_score * uncertainty
     
-    # Coverage: fraction of points within predictive interval
     coverage = float(
         np.mean((y_true >= lower) & (y_true <= upper))
     )
     
-    # Average interval width
     avg_width = float(np.mean(upper - lower))
     
-    # Calibration: ideal coverage == percentile
     miscalibration = float(np.abs(coverage - percentile))
     
-    # Sharpness: lower average uncertainty is sharper
     avg_uncertainty = float(np.mean(uncertainty))
     
     return {
