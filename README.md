@@ -1,15 +1,5 @@
 Edge AI Predictive Maintenance System
 
-Documentation Hub
-
-- Defense master guide: docs/PROJECT_DEFENSE_MASTER.md
-- Idea pitch scripts: docs/IDEA_PITCH_SCRIPTS.md
-- Teacher Q and A bank: docs/TEACHER_QA_BANK.md
-- Timeline and major changes: docs/PROJECT_TIMELINE_AND_CHANGES.md
-- Evaluation and accuracy guide: docs/EVALUATION_AND_ACCURACY.md
-- System diagrams: docs/SYSTEM_DIAGRAMS.md
-- Slide-ready diagrams: docs/SLIDE_DIAGRAMS.md
-- Training deep dive: TRAINING_GUIDE.md
 
 1. Introduction
 
@@ -207,14 +197,6 @@ There is no single accuracy number for the whole project. We evaluate task-wise:
 
 That is the correct way to evaluate a multi-task maintenance system.
 
-## Project documentation
-
-- Defense master guide: [docs/PROJECT_DEFENSE_MASTER.md](docs/PROJECT_DEFENSE_MASTER.md)
-- Idea pitch scripts: [docs/IDEA_PITCH_SCRIPTS.md](docs/IDEA_PITCH_SCRIPTS.md)
-- Teacher Q and A bank: [docs/TEACHER_QA_BANK.md](docs/TEACHER_QA_BANK.md)
-- Timeline and major changes: [docs/PROJECT_TIMELINE_AND_CHANGES.md](docs/PROJECT_TIMELINE_AND_CHANGES.md)
-- Evaluation and accuracy guide: [docs/EVALUATION_AND_ACCURACY.md](docs/EVALUATION_AND_ACCURACY.md)
-- Training guide: [TRAINING_GUIDE.md](TRAINING_GUIDE.md)
 
 ## Repository structure
 
