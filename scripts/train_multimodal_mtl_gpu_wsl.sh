@@ -14,6 +14,7 @@ fi
 
 source .venv-wsl-gpu/bin/activate
 
+# Discover CUDA-related shared library folders installed via pip nvidia-* wheels.
 LIB_PATHS="$(find "$PWD/.venv-wsl-gpu/lib" -type d -path "*/site-packages/nvidia/*/lib" | paste -sd: -)"
 if [[ -z "$LIB_PATHS" ]]; then
   echo "No CUDA library folders found under .venv-wsl-gpu/site-packages/nvidia."

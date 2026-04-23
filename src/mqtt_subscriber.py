@@ -76,6 +76,7 @@ CMAPSS_FEATURE_NAMES = [
     "sensor_measurement_21",
 ]
 
+# CMAPSS raw sensor ranges (FD001) for first 5 selected features.
 RAW_SENSOR_BOUNDS = {
     "temperature": (641.21, 644.53),
     "air_temperature": (1571.04, 1616.91),
@@ -84,6 +85,7 @@ RAW_SENSOR_BOUNDS = {
     "speed": (2387.90, 2388.56),
 }
 
+# Dashboard target ranges.
 UI_SENSOR_BOUNDS = {
     "temperature": (280.0, 360.0),
     "air_temperature": (270.0, 350.0),
@@ -284,6 +286,7 @@ def _parse_feature_payload(raw_payload: bytes):
             if timestamp is None:
                 timestamp = data.get("ts")
             if isinstance(timestamp, str):
+                # Supports ISO timestamps from edge devices.
                 try:
                     timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).timestamp()
                 except Exception:
@@ -331,6 +334,7 @@ def _build_output_mapping(output_details):
     if mapping["rul_std_index"] is None and scalar_candidates:
         mapping["rul_std_index"] = scalar_candidates.pop(0)
 
+    # Fallbacks for simple 2-output models (rul + stage)
     if mapping["rul_index"] is None and output_details:
         mapping["rul_index"] = output_details[0]["index"]
     if mapping["stage_index"] is None and len(output_details) > 1:
@@ -979,6 +983,7 @@ def start_subscriber(runtime_bundle, manager, metrics, fault_localizer=None):
             "RUL_std": rul_std,
             "status": status,
             "stage_probs": [round(p, 3) for p in stage_probs],
+            # Map first 5 CMAPSS features to UI so telemetry bars animate
             **ui_sensors,
             **diagnosis,
         })
@@ -1042,7 +1047,7 @@ def start_subscriber(runtime_bundle, manager, metrics, fault_localizer=None):
         manager.broadcast_from_thread(result)
         logger.info(
             f"[MQTT] {machine_id} Step={step} src={source} "
-            f"RUL={prediction:.1f}Â±{rul_std:.1f} {status} {latency*1000:.2f}ms"
+            f"RUL={prediction:.1f}±{rul_std:.1f} {status} {latency*1000:.2f}ms"
         )
 
     client = mqtt.Client(client_id="fastapi-subscriber")
@@ -1054,5 +1059,5 @@ def start_subscriber(runtime_bundle, manager, metrics, fault_localizer=None):
             client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
             client.loop_forever()
         except Exception as e:
-            logger.error(f"[MQTT] Error: {e} â€” retrying in 5s")
+            logger.error(f"[MQTT] Error: {e} — retrying in 5s")
             time.sleep(5)

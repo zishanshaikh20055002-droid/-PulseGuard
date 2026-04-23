@@ -80,10 +80,14 @@ class AsyncSensorFusionBuffer:
                 suffix = name.split("sensor_measurement_")[-1]
                 self.alias_map[f"s{suffix}"] = name
 
+        # Built-in aliases for future real sensors (rpm, torque_nm, etc.).
         for alias, target in CANONICAL_FEATURE_ALIASES.items():
             if target in self.feature_index:
                 self.alias_map[str(alias).strip().lower()] = target
 
+        # Optional runtime alias injection via JSON env var.
+        # Example:
+        # SENSOR_ALIAS_JSON={"process_temp_k":"sensor_measurement_2"}
         raw_aliases = os.getenv("SENSOR_ALIAS_JSON", "").strip()
         if raw_aliases:
             try:
@@ -112,6 +116,7 @@ class AsyncSensorFusionBuffer:
         if mapped:
             return mapped
 
+        # Allow modality prefixes like "thermal.process_temp_k".
         if "." in normalized:
             tail = normalized.split(".")[-1]
             if tail in self.feature_index:

@@ -1,5 +1,5 @@
 """
-model_train.py â€” end-to-end training script.
+model_train.py — end-to-end training script.
 
 Run this once to:
   1. Download CMAPSS FD001 dataset
@@ -26,7 +26,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def evaluate(model, X_test, y_rul_test, n_passes=30):
-    """Evaluate using MC Dropout â€” more realistic than single-pass eval."""
+    """Evaluate using MC Dropout — more realistic than single-pass eval."""
     from src.model import predict_with_uncertainty
 
     print(f"\nEvaluating with {n_passes} MC Dropout passes per sample...")
@@ -45,29 +45,32 @@ def evaluate(model, X_test, y_rul_test, n_passes=30):
     rmse = np.sqrt(mean_squared_error(y_rul_test, rul_means))
     avg_uncertainty = np.mean(rul_stds)
 
-    print(f"\n{'â”€'*40}")
+    print(f"\n{'─'*40}")
     print(f"  MAE  (lower = better): {mae:.2f} cycles")
     print(f"  RMSE (lower = better): {rmse:.2f} cycles")
     print(f"  Avg uncertainty (std): {avg_uncertainty:.2f} cycles")
-    print(f"{'â”€'*40}")
+    print(f"{'─'*40}")
 
+    # Show a few sample predictions
     print(f"\nSample predictions (first 10):")
     print(f"{'True RUL':>10} {'Pred Mean':>12} {'Uncertainty':>13}")
-    print(f"{'â”€'*37}")
+    print(f"{'─'*37}")
     for i in range(min(10, len(y_rul_test))):
-        print(f"{y_rul_test[i]:>10.1f} {rul_means[i]:>12.1f} Â± {rul_stds[i]:>8.1f}")
+        print(f"{y_rul_test[i]:>10.1f} {rul_means[i]:>12.1f} ± {rul_stds[i]:>8.1f}")
 
     return mae, rmse, avg_uncertainty
 
 
 def main():
     print("=" * 50)
-    print("  Edge AI â€” CMAPSS Model Training Pipeline")
+    print("  Edge AI — CMAPSS Model Training Pipeline")
     print("=" * 50)
 
+    # ── Step 1: Preprocess ────────────────────────────────────
     from src.preprocess_cmapss import run_pipeline
     X, y_rul, y_stage, scaler = run_pipeline()
 
+    # ── Step 2: Train ─────────────────────────────────────────
     print("\n" + "=" * 50)
     print("  Training Transformer + MC Dropout")
     print("=" * 50)
@@ -76,10 +79,12 @@ def main():
     model_dir = os.path.join(BASE_DIR, "models")
     model, history = train(X, y_rul, y_stage, model_dir, num_features=X.shape[2])
 
+    # ── Step 3: Quick validation eval ────────────────────────
     split   = int(len(X) * 0.8)
     X_val   = X[split:]
     y_val   = y_rul[split:]
 
+    # Fast single-pass eval first
     val_preds = []
     for i in range(len(X_val)):
         pred, _ = model(X_val[i:i+1], training=False)
@@ -89,13 +94,15 @@ def main():
     rmse = np.sqrt(mean_squared_error(y_val, val_preds))
     print(f"\nValidation (single-pass): MAE={mae:.2f}  RMSE={rmse:.2f}")
 
+    # MC Dropout eval on a subset (full eval is slow)
     subset = min(200, len(X_val))
     evaluate(model, X_val[:subset], y_val[:subset], n_passes=20)
 
+    # ── Step 4: Save final artifacts ──────────────────────────
     final_path = os.path.join(model_dir, "best_model_cmapss.keras")
-    print(f"\nâœ… Model saved: {final_path}")
-    print(f"âœ… Scaler saved: data/scaler_cmapss.pkl")
-    print(f"âœ… Data saved:   data/X_cmapss.npy")
+    print(f"\n✅ Model saved: {final_path}")
+    print(f"✅ Scaler saved: data/scaler_cmapss.pkl")
+    print(f"✅ Data saved:   data/X_cmapss.npy")
 
     print("\nNext step: run convert_tflite_cmapss.py to export for edge deployment")
 

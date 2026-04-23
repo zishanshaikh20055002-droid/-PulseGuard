@@ -66,6 +66,7 @@ def verify_npz_dataset(npz_path: str) -> dict[str, Any]:
         report["shapes"][key] = tuple(arr.shape)
         report["dtypes"][key] = str(arr.dtype)
         
+        # Check first dimension (samples) is consistent
         if n_samples is None:
             n_samples = len(arr)
         elif len(arr) != n_samples:
@@ -73,6 +74,7 @@ def verify_npz_dataset(npz_path: str) -> dict[str, Any]:
                 f"Shape mismatch: {key} has {len(arr)} samples, expected {n_samples}"
             )
         
+        # Check for NaN and Inf
         if np.issubdtype(arr.dtype, np.floating):
             nan_count = int(np.sum(np.isnan(arr)))
             inf_count = int(np.sum(np.isinf(arr)))
@@ -82,6 +84,7 @@ def verify_npz_dataset(npz_path: str) -> dict[str, Any]:
             if inf_count > 0:
                 report["issues"].append(f"{key}: {inf_count} Inf values found")
         
+        # Statistics
         if np.issubdtype(arr.dtype, np.floating):
             report["stats"][key] = {
                 "min": float(np.nanmin(arr)) if arr.size > 0 else None,
@@ -90,6 +93,7 @@ def verify_npz_dataset(npz_path: str) -> dict[str, Any]:
                 "std": float(np.nanstd(arr)) if arr.size > 0 else None,
             }
     
+    # Class balance for binary targets
     if "y_anomaly" in data:
         y_anom = data["y_anomaly"]
         pos_count = int(np.sum(y_anom > 0.5))
@@ -100,6 +104,7 @@ def verify_npz_dataset(npz_path: str) -> dict[str, Any]:
             "ratio": float(pos_count / (neg_count + 1e-6)),
         }
     
+    # Fault balance
     if "y_faults" in data:
         y_faults = data["y_faults"]
         if y_faults.ndim == 2:
@@ -154,6 +159,7 @@ def verify_ai4i_csv(csv_path: str) -> dict[str, Any]:
         else:
             report["issues"].append(f"Missing feature: {feat}")
     
+    # Check target columns
     for tgt in ["TWF", "HDF", "PWF", "OSF", "RNF", "Machine failure"]:
         if tgt in df.columns:
             col = df[tgt]
@@ -257,21 +263,21 @@ def main():
         if args.npz:
             print(f"Verifying fused dataset: {args.npz}")
             report = verify_npz_dataset(args.npz)
-            print("âœ… NPZ dataset verification passed")
+            print("✅ NPZ dataset verification passed")
         
         elif args.source == "ai4i":
             if not args.csv:
                 raise ValueError("--csv required for ai4i verification")
             print(f"Verifying AI4I dataset: {args.csv}")
             report = verify_ai4i_csv(args.csv)
-            print("âœ… AI4I CSV verification passed")
+            print("✅ AI4I CSV verification passed")
         
         elif args.source == "cwru":
             if not args.dir:
                 raise ValueError("--dir required for cwru verification")
             print(f"Verifying CWRU dataset: {args.dir}")
             report = verify_cwru_dir(args.dir)
-            print("âœ… CWRU directory verification passed")
+            print("✅ CWRU directory verification passed")
         
         else:
             print(f"Verification for {args.source} not yet implemented")
@@ -284,7 +290,7 @@ def main():
             print(json.dumps(report, indent=2, default=str))
         
         if report.get("summary", {}).get("has_issues"):
-            print("\nâš ï¸  Issues detected:")
+            print("\n⚠️  Issues detected:")
             for issue in report.get("issues", []):
                 print(f"  - {issue}")
         
@@ -295,7 +301,7 @@ def main():
             print(f"\nReport saved to {args.output}")
     
     except Exception as exc:
-        print(f"âŒ Verification failed: {exc}", file=sys.stderr)
+        print(f"❌ Verification failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
 

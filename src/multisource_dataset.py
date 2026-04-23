@@ -215,6 +215,7 @@ def _parse_ai4i(config: MultiSourceConfig) -> dict[str, np.ndarray]:
     scaler = StandardScaler()
     x_scaled = scaler.fit_transform(x_raw).astype(np.float32)
 
+    # RUL from backwards countdown to machine failure events.
     failure_col = None
     for cand in ["Machine failure", "machine_failure", "failure", "label", "target"]:
         if cand in df.columns:
@@ -365,6 +366,7 @@ def _extract_cwru_channels(mat_data: dict[str, Any]) -> list[np.ndarray]:
         if any(token in k for token in ["de_time", "fe_time", "ba_time", "time"]):
             channels.append(flat.astype(np.float32))
 
+    # fallback: any 1D numeric array if no known key exists
     if not channels:
         for key, value in mat_data.items():
             if isinstance(value, np.ndarray):
@@ -412,9 +414,11 @@ def _parse_cwru(config: MultiSourceConfig) -> dict[str, np.ndarray]:
             if not channels:
                 continue
 
+            # Ensure 3 channels by repeating available channels.
             while len(channels) < 3:
                 channels.append(channels[-1])
 
+            # Align by minimum length.
             min_len = min(len(ch) for ch in channels)
             if min_len < config.vibration_window:
                 continue
@@ -430,6 +434,7 @@ def _parse_cwru(config: MultiSourceConfig) -> dict[str, np.ndarray]:
                 name = mat_path.stem.lower()
                 is_normal = "normal" in name or "baseline" in name
                 if (not is_normal) and name.isdigit():
+                    # Common CWRU baseline files are 97-100.
                     is_normal = int(name) in {97, 98, 99, 100}
                 labels.append(0.0 if is_normal else 1.0)
 
@@ -455,6 +460,7 @@ def _parse_cwru(config: MultiSourceConfig) -> dict[str, np.ndarray]:
 
 
 def _read_wav_float(path: str) -> np.ndarray | None:
+    # Prefer scipy for broad WAV codec support (including WAVE_FORMAT_EXTENSIBLE).
     if wavfile is not None:
         try:
             _, audio = wavfile.read(path)
@@ -484,6 +490,7 @@ def _read_wav_float(path: str) -> np.ndarray | None:
         except Exception:
             pass
 
+    # Fallback to stdlib for basic PCM WAV files.
     try:
         with wave.open(path, "rb") as wf:
             n_channels = wf.getnchannels()

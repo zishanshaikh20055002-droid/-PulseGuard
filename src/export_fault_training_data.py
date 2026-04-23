@@ -113,6 +113,7 @@ def export_training_data(
     if df.empty:
         raise ValueError("No records matched export criteria")
 
+    # Keep only supervised target and model features expected by trainer.
     out = df.copy()
     out["fault_component"] = out["fault_component"].astype(str)
 

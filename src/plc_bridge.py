@@ -53,6 +53,7 @@ class PLCConfig:
     reconnect_delay_seconds: float = 5.0
     max_reconnect_attempts: int = 10
     
+    # Protocol-specific
     modbus_unit_id: int = 1
     modbus_starting_address: int = 0
     modbus_reg_count: int = 10
@@ -184,6 +185,7 @@ class ModbusPLCConnection(PLCConnectionBase):
         if regs is None:
             return None
         
+        # Map registers to sensor features (customize per deployment)
         return {
             "temperature": float(regs[0] / 100.0) if len(regs) > 0 else 0.0,
             "torque": float(regs[1] / 10.0) if len(regs) > 1 else 0.0,
@@ -231,6 +233,7 @@ class OPCUAPLCConnection(PLCConnectionBase):
             self.is_connected = False
     
     def read_registers(self, start: int, count: int) -> np.ndarray | None:
+        # OPC UA doesn't use "registers" like Modbus; override in poll()
         return None
     
     def poll(self) -> dict[str, float] | None:
@@ -431,6 +434,7 @@ class PLCStreamingBuffer:
     def _process_reading(self, reading: dict[str, float]) -> None:
         """Validate, canonicalize, and publish reading."""
         try:
+            # Convert to sensor packet
             packet = RealSensorPacket(
                 machine_id=self.plc.config.machine_id,
                 timestamp=time.time(),
@@ -438,8 +442,10 @@ class PLCStreamingBuffer:
                 values=reading,
             )
             
+            # Canonicalize feature names
             updates = to_feature_updates(packet)
             
+            # Publish to MQTT if configured
             if self.mqtt_publisher:
                 for update in updates:
                     try:
@@ -447,9 +453,11 @@ class PLCStreamingBuffer:
                     except Exception as e:
                         logger.warning(f"MQTT publish error: {e}")
             
+            # Call user callback
             if self.on_reading:
                 self.on_reading(packet, updates)
             
+            # Buffer reading
             self.plc.buffer_reading({
                 "timestamp": packet.timestamp,
                 "machine_id": packet.machine_id,

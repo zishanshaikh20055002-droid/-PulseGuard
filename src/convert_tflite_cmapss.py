@@ -1,5 +1,5 @@
 """
-convert_tflite_cmapss.py â€” converts the trained CMAPSS model to TFLite.
+convert_tflite_cmapss.py — converts the trained CMAPSS model to TFLite.
 
 MC Dropout + TFLite note:
   Standard TFLite quantization disables dropout at inference.
@@ -12,8 +12,10 @@ import tensorflow as tf
 import numpy as np
 import os
 
+# Automatically resolve the root directory
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Check both possible save names from your training script
 MODEL_PATH_1 = os.path.join(BASE_DIR, "models", "best_model.keras")
 MODEL_PATH_2 = os.path.join(BASE_DIR, "models", "best_model_cmapss.keras")
 MODEL_PATH   = MODEL_PATH_2 if os.path.exists(MODEL_PATH_2) else MODEL_PATH_1
@@ -42,13 +44,16 @@ class MCDropoutWrapper(tf.Module):
         stage_preds = []
 
         for _ in range(self.n_passes):
+            # Inject micro-noise to prevent TF from caching the dropout mask
             noise = tf.random.normal(shape=tf.shape(x), mean=0.0, stddev=1e-5)
             noisy_x = x + noise
             
+            # Now the training=True will generate a unique mask per pass
             rul, stage = self.model(noisy_x, training=True)
             rul_preds.append(rul[0, 0])
             stage_preds.append(stage[0])
 
+        # Stack the lists into static tensors
         rul_stack   = tf.stack(rul_preds)     # (N,)
         stage_stack = tf.stack(stage_preds)   # (N, 3)
 
@@ -85,6 +90,7 @@ def main():
     print(f"\nWrapping for MC Dropout ({N_PASSES} passes)...")
     wrapper = MCDropoutWrapper(model, n_passes=N_PASSES)
 
+    # Test the wrapper
     dummy = np.random.rand(1, WINDOW_SIZE, NUM_FEATURES).astype(np.float32)
     result = wrapper.predict(dummy)
     print(f"  Test output:")
@@ -92,7 +98,7 @@ def main():
     print(f"    rul_std  : {result['rul_std'].numpy()}")
     print(f"    stage_probs: {result['stage_probs'].numpy()}")
 
-    print("\nConverting to TFLite (float16 â€” preserves dropout)...")
+    print("\nConverting to TFLite (float16 — preserves dropout)...")
     converter = tf.lite.TFLiteConverter.from_concrete_functions(
         [wrapper.predict.get_concrete_function()]
     )
@@ -106,8 +112,9 @@ def main():
         f.write(tflite_model)
 
     size_kb = len(tflite_model) / 1024
-    print(f"\nâœ… Saved: {OUT_PATH}  ({size_kb:.1f} KB)")
+    print(f"\n✅ Saved: {OUT_PATH}  ({size_kb:.1f} KB)")
 
+    # Verify it runs
     print("\nVerifying TFLite model...")
     interp = tf.lite.Interpreter(model_path=OUT_PATH)
     interp.allocate_tensors()
@@ -117,7 +124,7 @@ def main():
     print(f"  Outputs:")
     for o in out:
         print(f"    {o['name']}: {o['shape']} {o['dtype']}")
-    print("\nâœ… TFLite model verified successfully")
+    print("\n✅ TFLite model verified successfully")
 
 
 if __name__ == "__main__":

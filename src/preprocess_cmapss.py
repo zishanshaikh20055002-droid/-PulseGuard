@@ -1,10 +1,10 @@
 """
-preprocess_cmapss.py â€” downloads and preprocesses the NASA CMAPSS FD001 dataset.
+preprocess_cmapss.py — downloads and preprocesses the NASA CMAPSS FD001 dataset.
 
 Key differences from ai4i2020:
   - Real turbofan engine run-to-failure data (100 engines)
   - Piecewise linear RUL: flat at RUL_MAX until degradation starts,
-    then linear countdown â€” industry standard approach
+    then linear countdown — industry standard approach
   - 14 informative sensors selected (7 constant sensors removed)
   - Normalisation per-sensor across all engines
 
@@ -21,6 +21,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import joblib
 
+# ── Config ────────────────────────────────────────────────────
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR   = os.path.join(BASE_DIR, "data")
 MODELS_DIR = os.path.join(BASE_DIR, "models")
@@ -28,27 +29,34 @@ MODELS_DIR = os.path.join(BASE_DIR, "models")
 CMAPSS_URL = "https://data.nasa.gov/download/ff5v-kuh6/application%2Fzip"
 RAW_FILE   = os.path.join(DATA_DIR, "CMAPSSData.zip")
 
+# Piecewise linear RUL cap — engines are treated as "healthy"
+# until they are within RUL_MAX cycles of failure
 RUL_MAX     = 125
 WINDOW_SIZE = 30
 
+# ── Column names ──────────────────────────────────────────────
 COLS = (
     ["unit", "cycle"]
     + [f"op_{i}" for i in range(1, 4)]
     + [f"s{i}" for i in range(1, 22)]
 )
 
+# Sensors that are constant (or near-constant) in FD001 → drop them
 CONSTANT_SENSORS = {"s1", "s5", "s6", "s10", "s16", "s18", "s19"}
 
+# 14 informative sensors kept
 FEATURE_COLS = [c for c in COLS[5:] if c not in CONSTANT_SENSORS]
+# Result: s2,s3,s4,s7,s8,s9,s11,s12,s13,s14,s15,s17,s20,s21
 
 NUM_FEATURES = len(FEATURE_COLS)   # 14
 
 
+# ── Download ──────────────────────────────────────────────────
 def download_cmapss():
     os.makedirs(DATA_DIR, exist_ok=True)
 
     if os.path.exists(os.path.join(DATA_DIR, "train_FD001.txt")):
-        print("âœ… CMAPSS data already downloaded")
+        print("✅ CMAPSS data already downloaded")
         return
 
     print(f"Downloading CMAPSS dataset from NASA...")
@@ -70,10 +78,10 @@ def download_cmapss():
                     z.extract(name, DATA_DIR)
                     print(f"  Extracted: {name}")
 
-        print("âœ… CMAPSS dataset ready")
+        print("✅ CMAPSS dataset ready")
 
     except Exception as e:
-        print(f"\nâŒ Auto-download failed: {e}")
+        print(f"\n❌ Auto-download failed: {e}")
         print("\nManual download steps:")
         print("  1. Go to: https://www.kaggle.com/datasets/behrad3d/nasa-cmaps")
         print("  2. Download the ZIP file")
@@ -81,12 +89,14 @@ def download_cmapss():
         raise
 
 
+# ── Load ──────────────────────────────────────────────────────
 def load_fd001(split: str = "train") -> pd.DataFrame:
     path = os.path.join(DATA_DIR, f"{split}_FD001.txt")
     df = pd.read_csv(path, sep=r"\s+", header=None, names=COLS)
     return df
 
 
+# ── Piecewise linear RUL ──────────────────────────────────────
 def add_rul(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compute piecewise linear RUL per engine:
@@ -105,6 +115,7 @@ def add_rul(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# ── Health stage ──────────────────────────────────────────────
 def add_health_stage(df: pd.DataFrame) -> pd.DataFrame:
     conditions = [
         df["RUL"] > 80,
@@ -115,6 +126,7 @@ def add_health_stage(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# ── Sliding windows ───────────────────────────────────────────
 def create_windows(df: pd.DataFrame, scaler=None):
     """
     Create sliding windows per engine.
@@ -144,12 +156,15 @@ def create_windows(df: pd.DataFrame, scaler=None):
     return X, y_rul, y_stage
 
 
+# ── Full pipeline ─────────────────────────────────────────────
 def run_pipeline():
+    # 1. Disabled automatic download to prevent 404 crash
+    # download_cmapss()
     
     # 2. Safety check: Ensure manual download was completed
     train_file = os.path.join(DATA_DIR, "train_FD001.txt")
     if not os.path.exists(train_file):
-        print("\nâŒ Dataset not found locally!")
+        print("\n❌ Dataset not found locally!")
         print("Please manually download the NASA CMAPSS dataset from Kaggle:")
         print("URL: https://www.kaggle.com/datasets/behrad3d/nasa-cmaps")
         print(f"Extract 'train_FD001.txt' directly into this folder: {DATA_DIR}")
@@ -168,6 +183,7 @@ def run_pipeline():
     print(f"\nHealth stage distribution:")
     print(df["health_stage"].value_counts().sort_index().to_string())
 
+    # Fit scaler on raw features before windowing
     scaler = StandardScaler()
     df[FEATURE_COLS] = scaler.fit_transform(df[FEATURE_COLS])
 
@@ -179,13 +195,14 @@ def run_pipeline():
     print(f"  y_rul   : {y_rul.shape}")
     print(f"  y_stage : {y_stage.shape}")
 
+    # Save
     os.makedirs(DATA_DIR, exist_ok=True)
     np.save(os.path.join(DATA_DIR, "X_cmapss.npy"),       X)
     np.save(os.path.join(DATA_DIR, "y_rul_cmapss.npy"),   y_rul)
     np.save(os.path.join(DATA_DIR, "y_stage_cmapss.npy"), y_stage)
     joblib.dump(scaler, os.path.join(DATA_DIR, "scaler_cmapss.pkl"))
 
-    print(f"\nâœ… Saved to {DATA_DIR}/")
+    print(f"\n✅ Saved to {DATA_DIR}/")
     print(f"   X_cmapss.npy, y_rul_cmapss.npy, y_stage_cmapss.npy, scaler_cmapss.pkl")
 
     return X, y_rul, y_stage, scaler

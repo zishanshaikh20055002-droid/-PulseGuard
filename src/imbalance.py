@@ -30,6 +30,7 @@ def effective_number_weights(class_counts: np.ndarray, beta: float = 0.9995) -> 
     effective_num = 1.0 - np.power(beta, counts)
     weights = (1.0 - beta) / np.clip(effective_num, 1e-8, None)
 
+    # Normalize to keep average weight ~1 for stable optimization.
     weights = weights / np.mean(weights)
     return weights.astype(np.float32)
 
@@ -55,6 +56,7 @@ def multilabel_sample_weights(
     class_counts = np.clip(class_counts, 1.0, None)
     class_weights = effective_number_weights(class_counts, beta=beta)
 
+    # Samples carrying rare-positive classes get larger weight.
     weighted_positive_mass = np.sum(y * class_weights[None, :], axis=1)
     sample_weights = 1.0 + weighted_positive_mass
 
@@ -117,6 +119,7 @@ def weighted_bootstrap_indices(
     if n == 0:
         return np.array([], dtype=np.int64)
 
+    # Rarity score from inverse-positive-frequency per class.
     class_counts = np.sum(faults > 0.5, axis=0).astype(np.float64)
     inv_freq = 1.0 / np.clip(class_counts, 1.0, None)
     fault_score = np.sum(faults * inv_freq[None, :], axis=1)
@@ -132,6 +135,7 @@ def weighted_bootstrap_indices(
         pos_factor = target_rate / max(observed_rate, 1e-6)
         neg_factor = (1.0 - target_rate) / max(1.0 - observed_rate, 1e-6)
 
+        # Keep class-balancing factors bounded to avoid unstable resampling.
         pos_factor = float(np.clip(pos_factor, 0.25, 4.0))
         neg_factor = float(np.clip(neg_factor, 0.25, 4.0))
 
@@ -170,6 +174,7 @@ def build_weighted_focal_bce(
 
         y_pred = tf.clip_by_value(y_pred, 1e-6, 1.0 - 1e-6)
 
+        # alpha_t: class-wise balance term (applied on positives)
         alpha_t = y_true * alpha + (1.0 - y_true)
         p_t = y_true * y_pred + (1.0 - y_true) * (1.0 - y_pred)
         focal_factor = tf.pow(1.0 - p_t, gamma)

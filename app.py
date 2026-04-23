@@ -1,5 +1,5 @@
 """
-app.py â€” FastAPI application (MQTT-powered v2).
+app.py — FastAPI application (MQTT-powered v2).
 """
 
 import asyncio
@@ -55,8 +55,10 @@ from src.database import (
 from src.fault_localization import FaultLocalizer
 from src.retraining import AutoRetrainCoordinator
 
+# ── Define BASE_DIR ───────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# ── Paths ─────────────────────────────────────────────────────
 DEFAULT_TFLITE_MODEL_PATH = os.path.join(BASE_DIR, "models", "model_cmapss_int8.tflite")
 DEFAULT_MULTIMODAL_MODEL_PATH = os.path.join(BASE_DIR, "models", "best_multimodal_mtl.keras")
 DEFAULT_MULTIMODAL_SAVEDMODEL_PATH = os.path.join(BASE_DIR, "models", "multimodal_savedmodel")
@@ -68,6 +70,7 @@ SCALER_PATH = os.getenv("RUNTIME_SCALER_PATH", os.path.join(BASE_DIR, "data", "s
 MQTT_BROKER = os.getenv("MQTT_BROKER", "mosquitto")
 MQTT_PORT   = int(os.getenv("MQTT_PORT", "1883"))
 
+# ── Load model ────────────────────────────────────────────────
 class _IdentityScaler:
     def transform(self, x):
         return x
@@ -188,6 +191,7 @@ def _load_runtime_bundle():
     )
 
 
+# ── Metrics bundle ────────────────────────────────────────────
 metrics = {
     "rul_gauge":             rul_gauge,
     "rul_std_gauge":         rul_std_gauge,
@@ -229,6 +233,7 @@ class FeedbackRelabelRequest(BaseModel):
 class ManualRetrainRequest(BaseModel):
     reason: str = Field(default="manual retraining", max_length=180)
 
+# ── App ───────────────────────────────────────────────────────
 app = FastAPI(
     title="Edge AI Predictive Maintenance API",
     description="Real-time machine health monitoring via MQTT + TFLite.",
@@ -252,6 +257,7 @@ init_db()
 ws_connections: dict = defaultdict(int)
 WS_MAX_PER_IP = 3
 
+# ── Startup ───────────────────────────────────────────────────
 def _runtime_unavailable_detail() -> str:
     return getattr(app.state, "startup_error", "") or "Runtime resources are not ready"
 
@@ -312,6 +318,7 @@ async def shutdown():
     if retrain_coordinator is not None:
         retrain_coordinator.stop()
 
+# ── Auth ──────────────────────────────────────────────────────
 @app.post("/auth/login", response_model=Token, tags=["Auth"])
 @limiter.limit("10/minute")
 def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
@@ -336,10 +343,11 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
 def get_me(request: Request, current_user: User = Depends(get_current_user)):
     return current_user
 
+# ── General ───────────────────────────────────────────────────
 @app.get("/", tags=["General"])
 @limiter.limit("30/minute")
 def home(request: Request):
-    return {"message": "Edge AI Predictive Maintenance API v2 ðŸš€ (MQTT-powered)"}
+    return {"message": "Edge AI Predictive Maintenance API v2 🚀 (MQTT-powered)"}
 
 @app.get("/health", tags=["General"])
 def health():
@@ -550,6 +558,7 @@ def fault_localizer_reload(request: Request, current_user: User = Depends(requir
         "info": fault_localizer.info(),
     }
 
+# ── Mode control ──────────────────────────────────────────────
 @app.post("/set_mode/{new_mode}", tags=["Control"])
 @limiter.limit("30/minute")
 def set_mode(
@@ -577,6 +586,7 @@ def set_mode(
     print(f"[MODE] '{cleaned}' set by '{current_user.username}'")
     return {"mode": cleaned, "set_by": current_user.username}
 
+# ── WebSocket ─────────────────────────────────────────────────
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     user = await get_ws_user(websocket)
@@ -592,10 +602,11 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     ws_connections[client_ip] += 1
     ws_active_connections.inc()
-    print(f"[WS] Connected â€” user: {user.username}")
+    print(f"[WS] Connected — user: {user.username}")
 
     try:
         while True:
+            # Keep a receive loop so disconnects are detected and cleaned up.
             await websocket.receive_text()
     except WebSocketDisconnect:
         pass
@@ -605,4 +616,4 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
         ws_connections[client_ip] = max(0, ws_connections[client_ip] - 1)
         ws_active_connections.dec()
-        print(f"[WS] Disconnected â€” user: {user.username}")
+        print(f"[WS] Disconnected — user: {user.username}")

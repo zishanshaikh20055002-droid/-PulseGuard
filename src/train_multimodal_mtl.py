@@ -61,6 +61,7 @@ def _select_training_device(prefer_gpu: bool = True, require_gpu: bool = False) 
         try:
             tf.config.set_visible_devices(selected, "GPU")
         except RuntimeError:
+            # If context was initialized, continue with default visibility.
             pass
 
         try:

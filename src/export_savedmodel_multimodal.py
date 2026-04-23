@@ -26,6 +26,7 @@ def export_saved_model(model_path: str, out_dir: str):
 
     os.makedirs(os.path.dirname(out_dir), exist_ok=True)
 
+    # Remove existing export to avoid stale signatures.
     if os.path.isdir(out_dir):
         import shutil
 

@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 import os
 
+# ── column names ──────────────────────────────────────────────
 FEATURE_COLS = [
     'Air temperature [K]',
     'Process temperature [K]',
@@ -13,17 +14,20 @@ FEATURE_COLS = [
 TARGET_COL   = 'Machine failure'
 WINDOW_SIZE  = 30   # how many past rows the model sees at once
 
+# ── step 1: load data ─────────────────────────────────────────
 def load_data(path):
     df = pd.read_csv(path)
     print(f"Loaded {len(df)} rows")
     return df
 
+# ── step 2: engineer RUL label ────────────────────────────────
 def add_rul(df):
     max_wear = df['Tool wear [min]'].max()
     df['RUL'] = max_wear - df['Tool wear [min]']
     print(f"RUL range: {df['RUL'].min()} to {df['RUL'].max()}")
     return df
 
+# ── step 3: add health stage label ───────────────────────────
 def add_health_stage(df):
     conditions = [
         df['RUL'] > 100,
@@ -36,12 +40,14 @@ def add_health_stage(df):
     print(df['health_stage'].value_counts().sort_index())
     return df
 
+# ── step 4: normalize features ────────────────────────────────
 def normalize(df):
     scaler = StandardScaler()
     df[FEATURE_COLS] = scaler.fit_transform(df[FEATURE_COLS])
     print("Features normalized")
     return df, scaler
 
+# ── step 5: create sliding windows ───────────────────────────
 def create_windows(df, window_size=WINDOW_SIZE):
     X, y_rul, y_stage = [], [], []
 
@@ -58,9 +64,10 @@ def create_windows(df, window_size=WINDOW_SIZE):
     y_rul   = np.array(y_rul, dtype=np.float32)
     y_stage = np.array(y_stage, dtype=np.int32)
 
-    print(f"Windows created â€” X: {X.shape}, y_rul: {y_rul.shape}")
+    print(f"Windows created — X: {X.shape}, y_rul: {y_rul.shape}")
     return X, y_rul, y_stage
 
+# ── step 6: run full pipeline ─────────────────────────────────
 def run_pipeline(data_path):
     df               = load_data(data_path)
     df               = add_rul(df)
@@ -77,6 +84,7 @@ if __name__ == "__main__":
         os.path.join(base, 'data', 'ai4i2020.csv')
     )
 
+    # save processed data
     np.save(os.path.join(base, 'data', 'X.npy'), X)
     np.save(os.path.join(base, 'data', 'y_rul.npy'), y_rul)
     np.save(os.path.join(base, 'data', 'y_stage.npy'), y_stage)

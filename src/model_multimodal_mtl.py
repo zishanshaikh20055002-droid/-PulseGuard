@@ -27,6 +27,7 @@ def _temporal_encoder(inputs, filters=64, lstm_units=64, dropout=0.2, mc_dropout
     x = layers.GlobalAveragePooling1D(name=f"{name_prefix}_gap")(x)
     dropout_layer = layers.Dropout(dropout, name=f"{name_prefix}_dropout")
     if mc_dropout:
+        # MC Dropout: apply dropout even at inference time for uncertainty
         dropout_layer = layers.Dropout(dropout, name=f"{name_prefix}_mc_dropout")
     x = dropout_layer(x, training=True) if mc_dropout else dropout_layer(x)
     return x
@@ -66,9 +67,12 @@ def build_multimodal_mtl_model(
     shared = layers.Dense(128, activation="relu", name="shared_dense2")(shared)
     shared = layers.Dropout(0.3, name="shared_dropout2")(shared)
 
+    # Head 1: system-level RUL
     head_rul = layers.Dense(64, activation="relu", name="rul_dense")(shared)
+    # Keep output heads in float32 for numerical stability under mixed precision.
     head_rul = layers.Dense(1, activation="relu", name="head_rul", dtype="float32")(head_rul)
 
+    # Head 2: multi-label fault diagnosis
     head_faults = layers.Dense(64, activation="relu", name="fault_dense")(shared)
     head_faults = layers.Dense(
         num_fault_classes,
@@ -77,6 +81,7 @@ def build_multimodal_mtl_model(
         dtype="float32",
     )(head_faults)
 
+    # Head 3: anomaly score for unknown behaviors
     head_anomaly_score = layers.Dense(32, activation="relu", name="anomaly_dense")(shared)
     head_anomaly_score = layers.Dense(
         1,

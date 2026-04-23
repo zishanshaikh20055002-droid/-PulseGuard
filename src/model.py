@@ -1,11 +1,11 @@
 """
-model.py â€” Transformer with Monte Carlo Dropout for RUL prediction
+model.py — Transformer with Monte Carlo Dropout for RUL prediction
            with uncertainty quantification.
 
 Key upgrade over v1:
   - MC Dropout: dropout stays active at inference time
-  - Run N forward passes â†’ distribution of predictions
-  - Output: RUL mean Â± std (epistemic uncertainty)
+  - Run N forward passes → distribution of predictions
+  - Output: RUL mean ± std (epistemic uncertainty)
   - 14 CMAPSS sensors instead of 5 ai4i2020 sensors
   - Piecewise linear RUL target (more realistic)
 
@@ -22,18 +22,23 @@ from tensorflow.keras import layers
 import os
 
 
+# ── Transformer block ─────────────────────────────────────────
 def transformer_block(x, embed_dim, num_heads, ff_dim, dropout_rate=0.2):
     """
     Standard transformer encoder block.
-    Dropout is applied ALWAYS (not just during training) â€” this is the
+    Dropout is applied ALWAYS (not just during training) — this is the
     key difference that enables MC Dropout uncertainty estimation.
     """
+    # Multi-head self-attention
     attn = layers.MultiHeadAttention(
         num_heads=num_heads, key_dim=embed_dim
     )(x, x)
+    # training=None means dropout follows the global keras learning_phase
+    # We control this at inference time by calling model(x, training=True)
     attn = layers.Dropout(dropout_rate)(attn)
     x = layers.LayerNormalization(epsilon=1e-6)(x + attn)
 
+    # Feed-forward network
     ffn = keras.Sequential([
         layers.Dense(ff_dim, activation="gelu"),  # GELU > ReLU for transformers
         layers.Dropout(dropout_rate),
@@ -45,6 +50,7 @@ def transformer_block(x, embed_dim, num_heads, ff_dim, dropout_rate=0.2):
     return x
 
 
+# ── Positional encoding ───────────────────────────────────────
 def positional_encoding(window_size, embed_dim):
     positions = np.arange(window_size)[:, np.newaxis]
     dims      = np.arange(embed_dim)[np.newaxis, :]
@@ -54,6 +60,7 @@ def positional_encoding(window_size, embed_dim):
     return tf.cast(angles[np.newaxis, :, :], dtype=tf.float32)
 
 
+# ── Build model ───────────────────────────────────────────────
 def build_model(
     window_size  = 30,
     num_features = 14,    # 14 CMAPSS sensors
@@ -65,29 +72,38 @@ def build_model(
 ):
     inputs = keras.Input(shape=(window_size, num_features))
 
+    # Project input features to embed_dim
     x = layers.Dense(embed_dim)(inputs)
 
+    # Add positional encoding
     x = x + positional_encoding(window_size, embed_dim)
 
+    # Stack transformer blocks (each has MC Dropout inside)
     for _ in range(num_blocks):
         x = transformer_block(x, embed_dim, num_heads, ff_dim, dropout_rate)
 
+    # Global average pooling
     x = layers.GlobalAveragePooling1D()(x)
     x = layers.Dropout(dropout_rate)(x)
 
+    # Shared dense layers
     x = layers.Dense(128, activation="gelu")(x)
     x = layers.Dropout(dropout_rate)(x)
     x = layers.Dense(64, activation="gelu")(x)
     x = layers.Dropout(dropout_rate)(x)
 
+    # ── Output heads ──
+    # RUL regression head
     rul_output = layers.Dense(1, name="rul")(x)
 
+    # Health stage classification head (3 classes: healthy/warning/critical)
     stage_output = layers.Dense(3, activation="softmax", name="stage")(x)
 
     model = keras.Model(inputs=inputs, outputs=[rul_output, stage_output])
     return model
 
 
+# ── MC Dropout inference ──────────────────────────────────────
 def predict_with_uncertainty(model, x, n_passes=30):
     """
     Run N stochastic forward passes with dropout active.
@@ -100,13 +116,14 @@ def predict_with_uncertainty(model, x, n_passes=30):
 
     Returns:
         rul_mean  (float): expected RUL
-        rul_std   (float): uncertainty â€” higher = less confident
+        rul_std   (float): uncertainty — higher = less confident
         stage_probs (array): mean class probabilities across passes
     """
     rul_preds   = []
     stage_preds = []
 
     for _ in range(n_passes):
+        # training=True keeps dropout active — this is the MC Dropout trick
         rul, stage = model(x, training=True)
         rul_preds.append(float(rul[0, 0]))
         stage_preds.append(stage[0].numpy())
@@ -118,18 +135,21 @@ def predict_with_uncertainty(model, x, n_passes=30):
     return rul_mean, rul_std, stage_probs
 
 
+# ── Train ─────────────────────────────────────────────────────
 def train(X, y_rul, y_stage, model_dir, num_features=14):
     split    = int(len(X) * 0.8)
     X_train  = X[:split];       X_val  = X[split:]
     yr_train = y_rul[:split];   yr_val = y_rul[split:]
     ys_train = y_stage[:split]; ys_val = y_stage[split:]
 
+    # Class weights for imbalanced stages
     total   = len(ys_train)
     classes = np.unique(ys_train)
     weights = {int(c): total / (len(classes) * np.sum(ys_train == c))
                for c in classes}
     print("Class weights:", weights)
 
+    # Generate an array mapping the correct weight to every single training sample
     stage_sample_weights = np.array([weights[int(y)] for y in ys_train])
 
     model = build_model(num_features=num_features)
@@ -189,5 +209,5 @@ if __name__ == "__main__":
 
     model, history = train(X, y_rul, y_stage, model_dir, num_features=X.shape[2])
 
-    print("\nâœ… Training complete")
+    print("\n✅ Training complete")
     print(f"   Saved to {model_dir}/best_model_cmapss.keras")

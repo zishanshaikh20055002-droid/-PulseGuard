@@ -132,6 +132,8 @@ def build_realtime_diagnosis(
     speed_rpm = float(ui_sensors.get("speed", 0.0))
     delta_temp_k = max(0.0, process_temp_k - ambient_temp_k)
 
+    # Derive electrical and vibration channels from the same CMAPSS feature vector
+    # so legacy and async streams both gain richer diagnostics immediately.
     s13 = _float_at(raw_features, 8, 2390.0)
     s15 = _float_at(raw_features, 10, 8.4)
     voltage_v = 360.0 + _norm(s13, 2385.0, 2395.0) * 80.0

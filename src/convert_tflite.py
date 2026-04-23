@@ -14,8 +14,12 @@ NUM_FEATURES = 14
 print(f"Loading model from {MODEL_PATH}...")
 model = tf.keras.models.load_model(MODEL_PATH)
 
+# =====================================================================
+# THE FIX: Force all Dropout layers to remain active during inference
+# =====================================================================
 for layer in model.layers:
     if isinstance(layer, tf.keras.layers.Dropout):
+        # This tells TF to never disable this layer, even when predicting
         layer.training = True 
 
 def representative_data_gen():
@@ -34,4 +38,4 @@ os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
 with open(OUT_PATH, "wb") as f:
     f.write(tflite_model)
 
-print(f"âœ… Conversion complete. Saved at {OUT_PATH}")
+print(f"✅ Conversion complete. Saved at {OUT_PATH}")
